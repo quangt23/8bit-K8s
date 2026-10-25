@@ -1,0 +1,38 @@
+/* PixelGPU design tokens. Sprite colours in components/sprites.ts use the same values. */
+:root {
+  /* Surfaces */
+  --cream: #f4ead5;
+  --cream-deep: #e8d8b5;
+  --parchment: #fbf5e6;
+  --wood: #8b5a2b;
+  --wood-dark: #5c3a1e;
+  --ink: #2b2118;
+  --ink-soft: #5a4a3a;
+
+  /* Nature + accents */
+  --leaf: #6a994e;
+  --leaf-dark: #3f6b2f;
+  --teal: #3f8f8a;
+  --teal-dark: #2c6b67;
+  --amber: #e0a030;
+  --red: #c4513d;
+  --lamp-green: #9fd36b;
+
+  /* Terminal */
+  --term-bg: #1f2a2a;
+  --term-bg-deep: #172020;
+  --term-text: #d6ecc9;
+  --term-muted: #93ab9c;
+  --term-accent: #9fd36b;
+  --term-error: #f0907d;
+
+  /* Typography */
+  --font-pixel: "Silkscreen", ui-monospace, monospace;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* Pixel geometry: everything snaps to a 4px grid */
+  --px: 4px;
+  --gap: calc(var(--px) * 6);
+  --radius: 0;
+}
