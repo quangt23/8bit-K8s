@@ -15,6 +15,10 @@ export default defineConfig({
       "/api": { target: backendUrl, changeOrigin: true },
     },
   },
+  build: {
+    // Phaser (~1.4 MB, ~360 kB gzipped) is lazy-loaded in its own chunk, after the UI renders.
+    chunkSizeWarningLimit: 1500,
+  },
   preview: {
     port: 4173,
     proxy: {
@@ -25,6 +29,7 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
+    include: ["src/**/*.test.{ts,tsx}"],
     css: false,
   },
 });

@@ -16,6 +16,15 @@ if [ ! -d "$ROOT/frontend/node_modules" ]; then
   exit 1
 fi
 
+port_in_use() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
+for port in 8000 5173; do
+  if port_in_use "$port"; then
+    echo "error: port $port is already in use. Is another 'make dev' running or suspended (Ctrl+Z)?" >&2
+    echo "       Find it with: ps -eo pid,stat,cmd | grep -E 'pixelgpu|vite'   (STAT 'T' = suspended)" >&2
+    exit 1
+  fi
+done
+
 pids=()
 cleanup() {
   trap - INT TERM EXIT

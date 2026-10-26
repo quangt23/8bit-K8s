@@ -22,4 +22,9 @@ export default tseslint.config(
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
     },
   },
+  {
+    // Tests index into fixtures they just built; asserting non-null there is clearer than guards.
+    files: ["**/*.test.{ts,tsx}", "e2e/**/*.ts"],
+    rules: { "@typescript-eslint/no-non-null-assertion": "off" },
+  },
 );

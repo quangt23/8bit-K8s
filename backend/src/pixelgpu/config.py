@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     # Origins allowed to call the API directly. The Vite dev server proxies /api,
     # so this is only needed when the frontend is served from another origin.
     cors_origins: list[str] = []
+    # Register the built-in simulated fleet (6 GPUs on 2 workers) at startup.
+    simulated_fleet: bool = True
 
 
 @lru_cache

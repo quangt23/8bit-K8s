@@ -24,17 +24,17 @@ make backend    # API only, with auto-reload in development
 make frontend   # UI only
 ```
 
-| URL                            | What                         |
-| ------------------------------ | ---------------------------- |
-| http://localhost:5173          | Frontend                     |
-| http://127.0.0.1:8000/api/health | Backend health             |
-| http://localhost:5173/api/docs | API docs (via proxy)         |
+| URL                              | What                 |
+| -------------------------------- | -------------------- |
+| http://localhost:5173            | Frontend             |
+| http://127.0.0.1:8000/api/health | Backend health       |
+| http://localhost:5173/api/docs   | API docs (via proxy) |
 
 ## Configuration
 
 Backend settings come from `PIXELGPU_*` environment variables or `backend/.env`. See
 `.env.example` for the full list. `PIXELGPU_BACKEND_URL` changes where the Vite dev server
-proxies `/api`.
+proxies `/api`. `PIXELGPU_SIMULATED_FLEET=false` starts with no GPUs (to see the empty state).
 
 ## Quality checks
 
@@ -47,8 +47,27 @@ make check       # all of the above
 make format      # auto-fix formatting
 ```
 
-Tests are deterministic and never touch the network or hardware: frontend tests stub `fetch`,
-and backend tests use FastAPI's in-process `TestClient`.
+Tests are deterministic and never touch the network or hardware: frontend tests stub `fetch`
+and replace the Phaser canvas with a stub, and backend tests use FastAPI's in-process `TestClient`.
+
+### Browser tests (Playwright)
+
+```bash
+make install-browsers   # once: downloads Chromium
+make e2e                # starts its own backend (:8765) and frontend (:5199)
+```
+
+Chromium needs some system libraries. On Debian/Ubuntu:
+
+```bash
+cd frontend && sudo npx playwright install-deps chromium
+```
+
+On a minimal WSL Ubuntu, the missing ones are typically `libnspr4`, `libnss3` and `libasound2t64`.
+
+The browser tests click real canvas coordinates (computed with the same `facility/layout.ts`
+the scene uses), check every visual state, block Phaser to exercise the fallback, and check
+reduced-motion and phone-width layouts.
 
 ## Troubleshooting
 
@@ -57,6 +76,11 @@ and backend tests use FastAPI's in-process `TestClient`.
 - **Port 5173 already in use.** Vite runs with `strictPort`, so stop the other process rather
   than letting Vite switch ports silently.
 - **`make dev` says dependencies are missing.** Run `make install`.
+- **"Address already in use" but nothing seems to be running.** A previous `make dev` may be
+  suspended (Ctrl+Z instead of Ctrl+C). Run `jobs` in that terminal and `fg` it, then Ctrl+C.
+  Or find it with `ps -eo pid,stat,cmd | grep -E "pixelgpu|vite"` (state `T` = stopped).
+- **The facility shows "couldn't start".** The browser console has the error. The roster and
+  inspector keep working without the scene.
 
 ## Optional hardware
 

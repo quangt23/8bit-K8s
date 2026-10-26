@@ -1,13 +1,5 @@
 import { vi } from "vitest";
 
-export const healthyBody = {
-  status: "ok",
-  service: "pixelgpu-backend",
-  version: "0.1.0",
-  environment: "test",
-  server_time: "2026-10-25T12:00:00Z",
-};
-
 export function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,

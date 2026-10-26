@@ -1,4 +1,4 @@
-import type { Sprite } from "./PixelSprite";
+import type { Sprite } from "../components/PixelSprite";
 
 /** Shared colours for original PixelGPU sprites. Keep in sync with styles/tokens.css. */
 const ink = "#2b2118";
@@ -87,4 +87,46 @@ export const logoChip: Sprite = {
     "KKKKKKKKKKKKK",
     ".w.w.w.w.w.w.",
   ],
+};
+
+const fanPalette = { K: "#141b1a", B: "#9fb3ae", c: "#e9f5ee" };
+
+/** Two-frame cooling fan; alternating frames reads as spinning at pixel scale. */
+export const fanFrames: readonly Sprite[] = [
+  {
+    palette: fanPalette,
+    rows: [
+      "..KKKK..",
+      ".K.BB.K.",
+      "K..BB..K",
+      "KBBccBBK",
+      "KBBccBBK",
+      "K..BB..K",
+      ".K.BB.K.",
+      "..KKKK..",
+    ],
+  },
+  {
+    palette: fanPalette,
+    rows: [
+      "..KKKK..",
+      ".KB..BK.",
+      "K.BBBB.K",
+      "K..cc..K",
+      "K..cc..K",
+      "K.BBBB.K",
+      ".KB..BK.",
+      "..KKKK..",
+    ],
+  },
+];
+
+export const alertBadge: Sprite = {
+  palette: { K: ink, R: "#d9503c", W: "#fbf5e6" },
+  rows: [".KKKKK.", "KRRWRRK", "KRRWRRK", "KRRWRRK", "KRRRRRK", "KRRWRRK", ".KKKKK.", "..KK..."],
+};
+
+export const unpluggedBadge: Sprite = {
+  palette: { K: ink, G: "#8c9796", W: "#fbf5e6" },
+  rows: [".KKKKK.", "KGGGGGK", "KGWGWGK", "KGGWGGK", "KGWGWGK", "KGGGGGK", ".KKKKK.", "..KK..."],
 };

@@ -36,3 +36,9 @@
   --gap: calc(var(--px) * 6);
   --radius: 0;
 }
+
+:root {
+  --mode-simulated: #5b4a8a;
+  --mode-cpu: #4a5a58;
+  --mode-gpu: #2c6b67;
+}

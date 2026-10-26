@@ -3,7 +3,7 @@
 | Phase | Goal                                   | Status       |
 | ----- | -------------------------------------- | ------------ |
 | 0     | Barebones project that runs            | **Complete** |
-| 1     | Pixel-art control room, simulated GPUs | Not started  |
+| 1     | Pixel-art control room, simulated GPUs | **Complete** |
 | 2     | Task submission and lifecycle          | Not started  |
 | 3     | Real scheduler and simulated workers   | Not started  |
 | 4     | Live updates and observability         | Not started  |
@@ -21,8 +21,19 @@
 - [x] Production frontend build succeeds (`make build`)
 - [x] Test suite passes (`make test`: 5 backend, 8 frontend)
 
+## Phase 1 acceptance criteria
+
+- [x] Scene renders reliably inside React (browser test; one canvas even under StrictMode)
+- [x] At least four distinct simulated GPUs are visible (6 across 2 racks)
+- [x] Selecting a GPU opens its details (scene click and roster, both browser-tested)
+- [x] Each GPU's identity matches the backend (browser test clicks real canvas coordinates)
+- [x] State indicators work: idle, reserved, running, error, offline (completed flash is wired but only reachable once tasks exist)
+- [x] App stays usable if the scene fails to load (browser test blocks Phaser)
+- [x] Cohesive visual design (screenshots reviewed at desktop and phone widths)
+
 ## Known gaps
 
 - No CI pipeline configured yet. `make check` is the intended CI entry point.
-- No browser-level end-to-end tests. Playwright will be considered once there are real user
-  workflows (Phase 2+).
+- Browser tests need Chromium's system libraries. They're not part of `make check` (see DEVELOPMENT.md).
+- "Ineligible for this task" GPU highlighting needs tasks and the scheduler (Phase 3).
+- Fleet state lives in memory and resets on restart. It moves to the database in Phase 2.

@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install dev backend frontend test test-backend test-frontend lint format typecheck build check clean
+.PHONY: help install install-browsers dev backend frontend test test-backend test-frontend e2e lint format typecheck build check clean
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -7,6 +7,9 @@ help: ## Show available commands
 install: ## Install backend and frontend dependencies
 	cd backend && uv sync
 	cd frontend && npm install
+
+install-browsers: ## Download Chromium for browser tests (system libs: see docs/DEVELOPMENT.md)
+	cd frontend && npx playwright install chromium
 
 dev: ## Run backend and frontend together
 	./scripts/dev.sh
@@ -24,6 +27,9 @@ test-backend:
 
 test-frontend:
 	cd frontend && npm test
+
+e2e: ## Browser tests (starts its own servers on ports 8765/5199)
+	cd frontend && npm run test:e2e
 
 lint: ## Lint and format-check everything
 	cd backend && uv run ruff check . && uv run ruff format --check .
@@ -43,4 +49,4 @@ build: ## Production frontend build
 check: lint typecheck test build ## Everything CI would run
 
 clean: ## Remove build artifacts and caches
-	rm -rf frontend/dist frontend/node_modules/.tmp backend/.pytest_cache backend/.mypy_cache backend/.ruff_cache
+	rm -rf frontend/dist frontend/node_modules/.tmp frontend/test-results frontend/playwright-report backend/.pytest_cache backend/.mypy_cache backend/.ruff_cache
