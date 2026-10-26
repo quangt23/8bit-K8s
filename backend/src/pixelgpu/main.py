@@ -1,14 +1,19 @@
 """FastAPI application factory.
 
-Run locally with: ``uv run uvicorn pixelgpu.main:app --reload``
+Run locally with: ``uv run python -m pixelgpu``
 """
+
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from pixelgpu import __version__
-from pixelgpu.api import fleet, health
+from pixelgpu.api import fleet, health, tasks
+from pixelgpu.api.errors import install_error_handlers
 from pixelgpu.config import Settings, get_settings
+from pixelgpu.db import create_db_engine, create_session_factory, upgrade_database
 from pixelgpu.fleet.registry import FleetRegistry
 from pixelgpu.fleet.simulated import build_simulated_fleet
 
@@ -17,13 +22,24 @@ API_PREFIX = "/api"
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
+    engine = create_db_engine(settings.database_url)
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        if settings.auto_migrate:
+            upgrade_database(settings.database_url)
+        yield
+        engine.dispose()
+
     app = FastAPI(
         title="PixelGPU API",
         version=__version__,
         docs_url=f"{API_PREFIX}/docs",
         openapi_url=f"{API_PREFIX}/openapi.json",
+        lifespan=lifespan,
     )
     app.state.settings = settings
+    app.state.session_factory = create_session_factory(engine)
     app.state.fleet = (
         FleetRegistry(*build_simulated_fleet()) if settings.simulated_fleet else FleetRegistry()
     )
@@ -34,8 +50,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             allow_methods=["GET", "POST", "DELETE"],
             allow_headers=["Content-Type"],
         )
+    install_error_handlers(app)
     app.include_router(health.router, prefix=API_PREFIX)
     app.include_router(fleet.router, prefix=API_PREFIX)
+    app.include_router(tasks.router, prefix=API_PREFIX)
     return app
 
 

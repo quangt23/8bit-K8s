@@ -1,4 +1,6 @@
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import ExitStack
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -10,11 +12,22 @@ ClientFactory = Callable[..., TestClient]
 
 
 @pytest.fixture
-def make_client() -> ClientFactory:
-    def factory(**overrides: object) -> TestClient:
-        return TestClient(create_app(Settings(environment="test", **overrides)))  # type: ignore[arg-type]
+def database_url(tmp_path: Path) -> str:
+    return f"sqlite:///{tmp_path / 'test.db'}"
 
-    return factory
+
+@pytest.fixture
+def make_client(database_url: str) -> Iterator[ClientFactory]:
+    """Build clients with their own settings. Each runs the app lifespan (migrations)."""
+    with ExitStack() as stack:
+
+        def factory(**overrides: object) -> TestClient:
+            fields: dict[str, object] = {"environment": "test", "database_url": database_url}
+            fields.update(overrides)
+            app = create_app(Settings.model_validate(fields))
+            return stack.enter_context(TestClient(app))
+
+        yield factory
 
 
 @pytest.fixture

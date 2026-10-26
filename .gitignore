@@ -12,6 +12,9 @@ __pycache__/
 .ruff_cache/
 *.egg-info/
 backend/*.db
+backend/*.db-journal
+backend/*.db-wal
+backend/*.db-shm
 backend/*.sqlite3
 
 # Node

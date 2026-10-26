@@ -36,6 +36,22 @@ Backend settings come from `PIXELGPU_*` environment variables or `backend/.env`.
 `.env.example` for the full list. `PIXELGPU_BACKEND_URL` changes where the Vite dev server
 proxies `/api`. `PIXELGPU_SIMULATED_FLEET=false` starts with no GPUs (to see the empty state).
 
+## Database
+
+Local development uses SQLite at `backend/pixelgpu.db` (gitignored). The backend applies
+pending migrations when it starts, so normally there's nothing to do.
+
+```bash
+make migrate                                   # apply migrations by hand
+rm backend/pixelgpu.db                         # reset: start with an empty task history
+cd backend && uv run alembic revision --autogenerate -m "describe change"   # new migration
+```
+
+After adding a migration, review the generated file. `tests/test_migrations.py` fails if
+the migrations and the ORM models disagree.
+
+Tests and browser tests always use their own temporary databases.
+
 ## Quality checks
 
 ```bash
@@ -65,9 +81,9 @@ cd frontend && sudo npx playwright install-deps chromium
 
 On a minimal WSL Ubuntu, the missing ones are typically `libnspr4`, `libnss3` and `libasound2t64`.
 
-The browser tests click real canvas coordinates (computed with the same `facility/layout.ts`
-the scene uses), check every visual state, block Phaser to exercise the fallback, and check
-reduced-motion and phone-width layouts.
+The browser tests use a fresh temporary database. They click real canvas coordinates (computed with the same `facility/layout.ts`
+the scene uses), check every visual state, block Phaser to exercise the fallback, check
+reduced-motion and phone-width layouts, and submit, reload and cancel real tasks.
 
 ## Troubleshooting
 

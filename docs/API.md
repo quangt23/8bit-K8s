@@ -2,7 +2,9 @@
 
 Base path: `/api`. Interactive docs: `/api/docs`. OpenAPI schema: `/api/openapi.json`.
 
-All endpoints are read-only for now, and none require authentication (localhost only).
+No endpoint requires authentication yet: PixelGPU is meant for localhost until Phase 8.
+Clients can create, read and cancel tasks, but never set a task's status, GPU assignment or
+resource measurements. Those belong to the backend.
 
 ## Telemetry provenance
 
@@ -94,10 +96,131 @@ One `GpuDevice`. Returns **404** `{"detail": "GPU 'GPU-99' not found."}` for unk
 | `schedulable`          | bool                                    | Derived: healthy and idle                |
 | `unschedulable_reason` | string \| null                          | Derived explanation when not schedulable |
 
+## Workloads
+
+### `GET /api/workloads`
+
+The allowlist of workload types, with labels, descriptions and the JSON Schema of each
+config. Anything not listed here is rejected.
+
+| `type`             | Config fields (defaults)                                                                            | Minimum memory          |
+| ------------------ | --------------------------------------------------------------------------------------------------- | ----------------------- |
+| `echo`             | `message` (1–500 chars)                                                                             | 512 MiB                 |
+| `text_summary`     | `text` (20–20,000 chars), `max_sentences` (1–10, default 3)                                         | 2 GiB                   |
+| `sample_inference` | `model` (`pixel-tiny-1b` \| `pixel-small-7b`), `prompt` (1–2000), `max_tokens` (1–512, default 128) | 4 GiB / 14 GiB by model |
+| `benchmark`        | `duration_seconds` (5–120, default 30), `matrix_size` (1024–8192, default 4096)                     | `matrix_size` MiB       |
+
+Unknown config fields are rejected. The sample model names label simulated runs; they are
+not real models (real inference is Phase 6).
+
+## Tasks
+
+### Lifecycle
+
+```
+queued ──► scheduled ──► running ──► succeeded
+   │           │            │
+   └───────────┴────────────┴──► failed / cancelled
+```
+
+Only these transitions are allowed, and terminal states never change. Until the scheduler
+exists (Phase 3), tasks stay `queued`.
+
+### `POST /api/tasks` → 201 `Task`
+
+```json
+{
+  "prompt": "Nightly throughput check",
+  "workload": {
+    "type": "benchmark",
+    "duration_seconds": 60,
+    "matrix_size": 8192
+  },
+  "resources": { "min_memory_mb": 16384 }
+}
+```
+
+| Field                     | Notes                                                                                                                                                   |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `prompt`                  | Optional, ≤ 2000 chars. The user's own words, stored for context and **never executed**.                                                                |
+| `workload`                | Required. One of the allowlisted specs above, chosen by `type`.                                                                                         |
+| `resources.min_memory_mb` | Optional, 1–262,144. Can raise the workload's minimum but never lower it; a lower value is replaced by the minimum and a warning is logged on the task. |
+
+Unknown top-level fields (such as `status` or `assigned_gpu_id`) are rejected.
+
+Errors: `422 validation_error`, `422 unsupported_workload`, and `429 too_many_active_tasks`
+once `PIXELGPU_MAX_ACTIVE_TASKS` tasks are queued, scheduled or running. The limit is a soft
+cap: it's checked before insert, so simultaneous submissions can overshoot by a few.
+
+### `GET /api/tasks?status=&limit=` → `{ "tasks": Task[], "total": int }`
+
+Newest first. `status` filters by lifecycle state. `limit` is 1–200 (default 50). `total`
+counts every match, not just the returned page.
+
+### `GET /api/tasks/{id}` → `Task` plus `events`
+
+`events` is the task's history, oldest first:
+
+| Field                          | Notes                                                              |
+| ------------------------------ | ------------------------------------------------------------------ |
+| `kind`                         | `status` (a lifecycle transition) or `log` (an execution log line) |
+| `level`                        | `info`, `warning` or `error`                                       |
+| `from_status`, `to_status`     | Set on status events                                               |
+| `message`, `timestamp`, `data` |                                                                    |
+
+### `POST /api/tasks/{id}/cancel` → `Task`
+
+- `queued` or `scheduled`: becomes `cancelled` immediately, with error code `cancelled`.
+- `running`: sets `cancel_requested_at` and logs a warning. The worker is expected to stop
+  and finish the transition (Phase 3). Repeating the request has no further effect.
+- Finished (`succeeded`, `failed`, `cancelled`): `409 invalid_transition`.
+
+Unknown IDs return `404 not_found`.
+
+### `Task`
+
+| Field                                                                                          | Notes                                                      |
+| ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `id`                                                                                           | `task_` + 16 hex characters                                |
+| `prompt`, `workload`, `min_memory_mb`                                                          | As submitted. `min_memory_mb` is the effective requirement |
+| `status`                                                                                       | Lifecycle state                                            |
+| `queue_position`                                                                               | 1-based FIFO position while `queued`, otherwise `null`     |
+| `created_at`, `updated_at`, `scheduled_at`, `started_at`, `finished_at`, `cancel_requested_at` | UTC ISO timestamps                                         |
+| `assigned_worker_id`, `assigned_gpu_id`                                                        | Set by the scheduler (Phase 3)                             |
+| `progress`                                                                                     | 0–1 when a worker reports it, otherwise `null`             |
+| `result`                                                                                       | Workload output                                            |
+| `error`                                                                                        | `{ "code", "message" }` on failure or cancellation         |
+| `scheduler_decision`                                                                           | Recorded by the scheduler (Phase 3)                        |
+
 ## Errors
 
-FastAPI's default shape: `{"detail": "..."}`. Unknown routes return 404.
+Every error uses one shape:
+
+```json
+{
+  "error": {
+    "code": "validation_error",
+    "message": "The request is invalid. See details.",
+    "details": [
+      {
+        "field": "workload.text",
+        "message": "String should have at least 20 characters"
+      }
+    ]
+  }
+}
+```
+
+| Status | `code`                  | When                                         |
+| ------ | ----------------------- | -------------------------------------------- |
+| 404    | `not_found`             | Unknown route, GPU or task                   |
+| 405    | `method_not_allowed`    | e.g. `PUT /api/tasks/{id}`                   |
+| 409    | `invalid_transition`    | A lifecycle change the state machine forbids |
+| 422    | `validation_error`      | Bad input. `details[].field` names the field |
+| 422    | `unsupported_workload`  | `workload.type` isn't in the allowlist       |
+| 429    | `too_many_active_tasks` | Submission limit reached                     |
 
 ## Live updates
 
-The frontend polls `GET /api/fleet` every 5 seconds. WebSocket updates are planned for Phase 4.
+The frontend polls: the fleet every 5 s, the task list every 3 s, and the selected task every 2 s.
+WebSocket updates are planned for Phase 4.

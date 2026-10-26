@@ -3,41 +3,19 @@ import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
 import App from "./App";
-import type { FacilityModel } from "./facility/FacilityScene";
-import { jsonResponse, stubFetch } from "./test/fetch";
-import { simulatedFleet } from "./test/fleetFixture";
+import { FakeBackend } from "./test/fakeBackend";
+import { sceneControl } from "./test/sceneStub";
 
-// Phaser needs a real canvas, so the scene is replaced with a stub that exposes
-// exactly what React hands it, plus a way to simulate clicks inside the scene.
-const sceneControl = vi.hoisted(() => ({ fail: null as Error | null }));
-
-vi.mock("./facility/FacilityCanvas", () => ({
-  FacilityCanvas: ({
-    model,
-    onSelectGpu,
-    onError,
-  }: {
-    model: FacilityModel;
-    onSelectGpu: (id: string) => void;
-    onError: (error: unknown) => void;
-  }) => {
-    if (sceneControl.fail) {
-      queueMicrotask(() => onError(sceneControl.fail));
-    }
-    return (
-      <div data-testid="scene" data-selected={model.selectedGpuId ?? ""}>
-        {model.gpus.map((gpu) => (
-          <button key={gpu.id} type="button" onClick={() => onSelectGpu(gpu.id)}>
-            scene:{gpu.id}
-          </button>
-        ))}
-      </div>
-    );
-  },
+vi.mock("./facility/FacilityCanvas", async () => ({
+  FacilityCanvas: (await import("./test/sceneStub")).FacilityCanvasStub,
 }));
+
+let backend: FakeBackend;
 
 beforeEach(() => {
   sceneControl.fail = null;
+  backend = new FakeBackend();
+  backend.install();
 });
 
 function roster() {
@@ -49,14 +27,13 @@ function inspector() {
 }
 
 async function renderLoaded() {
-  stubFetch(async () => jsonResponse(simulatedFleet()));
   render(<App />);
   await screen.findByTestId("scene");
 }
 
 describe("control room", () => {
   it("shows a loading state before the fleet arrives", () => {
-    stubFetch(() => new Promise(() => {}));
+    vi.stubGlobal("fetch", () => new Promise(() => {}));
     render(<App />);
 
     expect(screen.getByText("Powering up the facility…")).toBeInTheDocument();
@@ -148,9 +125,7 @@ describe("control room", () => {
   });
 
   it("shows an empty state when no GPUs are registered", async () => {
-    stubFetch(async () =>
-      jsonResponse({ workers: [], gpus: [], generated_at: "2026-10-25T12:00:00Z" }),
-    );
+    backend.fleet = { workers: [], gpus: [], generated_at: "2026-10-25T12:00:00Z" };
     render(<App />);
 
     expect(await screen.findByText("No GPUs are registered.")).toBeInTheDocument();
@@ -158,27 +133,25 @@ describe("control room", () => {
   });
 
   it("shows an error with retry when the fleet cannot load, then recovers", async () => {
-    const fetchMock = stubFetch(async () => {
-      throw new TypeError("Failed to fetch");
-    });
+    backend.offline = true;
     render(<App />);
 
     expect(await screen.findByText(/Couldn't load the fleet/)).toBeInTheDocument();
     expect(screen.getByText("API offline")).toBeInTheDocument();
 
-    fetchMock.mockImplementation(async () => jsonResponse(simulatedFleet()));
-    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    backend.offline = false;
+    const facility = within(screen.getByRole("region", { name: "GPU facility" }));
+    await userEvent.click(facility.getByRole("button", { name: "Try again" }));
 
     expect(await screen.findByTestId("scene")).toBeInTheDocument();
   });
 
   it("keeps the roster and inspector usable when the scene fails", async () => {
     sceneControl.fail = new Error("WebGL unavailable");
-    stubFetch(async () => jsonResponse(simulatedFleet()));
+    vi.spyOn(console, "error").mockImplementation(() => {});
     render(<App />);
 
     expect(await screen.findByText(/couldn't start \(WebGL unavailable\)/)).toBeInTheDocument();
-    vi.spyOn(console, "error").mockImplementation(() => {});
 
     await userEvent.click(roster().getByRole("button", { name: /GPU-03/ }));
     expect(inspector().getByRole("heading", { name: "GPU-03" })).toBeInTheDocument();

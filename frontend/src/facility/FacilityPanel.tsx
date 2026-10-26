@@ -30,8 +30,8 @@ function summary(gpus: readonly GpuDevice[], workers: readonly Worker[]): string
 export function FacilityPanel({ fleet, selectedGpuId, onSelectGpu, onRetry }: FacilityPanelProps) {
   const reducedMotion = useReducedMotion();
   const [sceneError, setSceneError] = useState<string | null>(null);
-  const gpus = fleet.kind === "ready" ? fleet.fleet.gpus : EMPTY_GPUS;
-  const workers = fleet.kind === "ready" ? fleet.fleet.workers : EMPTY_WORKERS;
+  const gpus = fleet.kind === "ready" ? fleet.data.gpus : EMPTY_GPUS;
+  const workers = fleet.kind === "ready" ? fleet.data.workers : EMPTY_WORKERS;
 
   const model = useMemo(
     () => ({ gpus, workers, selectedGpuId, reducedMotion }),

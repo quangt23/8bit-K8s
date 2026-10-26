@@ -3,8 +3,8 @@ import { formatMemory, gpuVisualState, STATE_STYLES } from "../fleet/gpuState";
 import { ModeBadge } from "./ModeBadge";
 import { StatusLamp } from "./StatusLamp";
 
-interface InspectorProps {
-  gpu: GpuDevice | null;
+interface GpuInspectorProps {
+  gpu: GpuDevice;
   worker: Worker | null;
 }
 
@@ -60,18 +60,7 @@ function MemoryBar({ used, total }: { used: number; total: number }) {
   );
 }
 
-export function Inspector({ gpu, worker }: InspectorProps) {
-  if (!gpu) {
-    return (
-      <aside className="panel inspector inspector--empty" aria-labelledby="inspector-heading">
-        <h2 id="inspector-heading" className="pixel-heading">
-          Inspector
-        </h2>
-        <p>Select a GPU in the facility or the fleet roster to inspect it.</p>
-      </aside>
-    );
-  }
-
+export function GpuInspector({ gpu, worker }: GpuInspectorProps) {
   const state = gpuVisualState(gpu);
   const used = gpu.memory_used.value;
 

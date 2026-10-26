@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install install-browsers dev backend frontend test test-backend test-frontend e2e lint format typecheck build check clean
+.PHONY: help install install-browsers dev backend frontend test test-backend test-frontend e2e migrate lint format typecheck build check clean
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -27,6 +27,9 @@ test-backend:
 
 test-frontend:
 	cd frontend && npm test
+
+migrate: ## Apply database migrations (the backend also does this at startup)
+	cd backend && uv run alembic upgrade head
 
 e2e: ## Browser tests (starts its own servers on ports 8765/5199)
 	cd frontend && npm run test:e2e

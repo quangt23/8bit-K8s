@@ -4,7 +4,7 @@
 | ----- | -------------------------------------- | ------------ |
 | 0     | Barebones project that runs            | **Complete** |
 | 1     | Pixel-art control room, simulated GPUs | **Complete** |
-| 2     | Task submission and lifecycle          | Not started  |
+| 2     | Task submission and lifecycle          | **Complete** |
 | 3     | Real scheduler and simulated workers   | Not started  |
 | 4     | Live updates and observability         | Not started  |
 | 5     | Real GPU discovery (NVIDIA, optional)  | Not started  |
@@ -31,9 +31,23 @@
 - [x] App stays usable if the scene fails to load (browser test blocks Phaser)
 - [x] Cohesive visual design (screenshots reviewed at desktop and phone widths)
 
+## Phase 2 acceptance criteria
+
+- [x] Submitting a task creates a persistent database record (API and browser tests)
+- [x] Refreshing the page preserves task history (browser test reloads the page; API test restarts the app on the same database)
+- [x] Invalid workload requests are rejected clearly (`unsupported_workload`, and `validation_error` naming the field)
+- [x] Tasks can be inspected individually (`GET /api/tasks/{id}` with timeline and logs, task inspector)
+- [x] Invalid lifecycle transitions are rejected (exhaustive state-machine test, compare-and-swap race test, 409 on cancel)
+- [x] The frontend reflects actual backend task status (polling; cancel and run-again round-trip through the API)
+- [x] Tasks stay `queued` until the Phase 3 scheduler exists
+
 ## Known gaps
 
 - No CI pipeline configured yet. `make check` is the intended CI entry point.
 - Browser tests need Chromium's system libraries. They're not part of `make check` (see DEVELOPMENT.md).
 - "Ineligible for this task" GPU highlighting needs tasks and the scheduler (Phase 3).
-- Fleet state lives in memory and resets on restart. It moves to the database in Phase 2.
+- Fleet state lives in memory; it moves to the database with reservations in Phase 3.
+- No task ever leaves `queued` on its own yet (no scheduler), so running, succeeded and failed
+  appear only in tests.
+- The active-task limit is a soft cap (count, then insert).
+- The task list shows the newest 100 tasks; there's no pagination UI yet.

@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     # Origins allowed to call the API directly. The Vite dev server proxies /api,
     # so this is only needed when the frontend is served from another origin.
     cors_origins: list[str] = []
+    database_url: str = "sqlite:///./pixelgpu.db"
+    # Apply pending migrations at startup. Disable when migrations are run as a deploy step.
+    auto_migrate: bool = True
+    # Submission limit: queued + scheduled + running tasks allowed at once.
+    max_active_tasks: int = 100
     # Register the built-in simulated fleet (6 GPUs on 2 workers) at startup.
     simulated_fleet: bool = True
 

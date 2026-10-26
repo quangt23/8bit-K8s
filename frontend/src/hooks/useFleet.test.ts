@@ -18,7 +18,7 @@ describe("useFleet", () => {
     const state = result.current.state;
     expect(state.kind).toBe("ready");
     if (state.kind !== "ready") return;
-    expect(state.fleet.gpus).toHaveLength(6);
+    expect(state.data.gpus).toHaveLength(6);
     expect(state.error).toBe("Could not reach the PixelGPU backend.");
   });
 

@@ -60,7 +60,9 @@ def test_unknown_gpu_returns_404(client: TestClient) -> None:
     response = client.get("/api/gpus/GPU-99")
 
     assert response.status_code == 404
-    assert response.json() == {"detail": "GPU 'GPU-99' not found."}
+    assert response.json() == {
+        "error": {"code": "not_found", "message": "GPU 'GPU-99' not found.", "details": []}
+    }
 
 
 def test_unhealthy_devices_explain_why_they_are_unschedulable(client: TestClient) -> None:

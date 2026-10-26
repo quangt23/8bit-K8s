@@ -4,6 +4,15 @@
 design so earlier phases don't paint it into a corner. It will be rewritten to describe the
 real behaviour once that exists.
 
+## What already exists (Phase 2)
+
+- Tasks with an effective `min_memory_mb` (the workload minimum, raised by any user request).
+- The lifecycle `queued → scheduled → running → succeeded | failed | cancelled`, enforced by
+  `tasks/lifecycle.py`.
+- `TaskService.transition()`, a compare-and-swap status update. The scheduler will use it so
+  that a task can't be scheduled twice, or scheduled after it was cancelled.
+- `scheduler_decision`, `assigned_worker_id` and `assigned_gpu_id` columns, all still unused.
+
 ## Intended policy (Phase 3)
 
 1. Validate the workload type (allowlist) and its resource requirements.

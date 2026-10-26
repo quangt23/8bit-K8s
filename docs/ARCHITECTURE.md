@@ -1,27 +1,35 @@
 # Architecture
 
-_Current as of Phase 1. Sections marked **planned** describe intent, not implemented code._
+_Current as of Phase 2. Sections marked **planned** describe intent, not implemented code._
 
 ## Components
 
 ```
-Browser ──► Vite dev server (:5173) ──/api proxy──► FastAPI (:8000)
-            React UI                                 pixelgpu.main:create_app
+Browser ──► Vite dev server (:5173) ──/api proxy──► FastAPI (:8000) ──► SQLite (pixelgpu.db)
+            React UI                                 pixelgpu.main:create_app   via SQLAlchemy
 ```
 
 ### Backend (`backend/src/pixelgpu`)
 
-| Module               | Responsibility                                                           |
-| -------------------- | ------------------------------------------------------------------------ |
-| `main.py`            | `create_app(settings)` factory: routers, CORS, `app.state.settings`      |
-| `config.py`          | `Settings` (pydantic-settings), env prefix `PIXELGPU_`                   |
-| `api/deps.py`        | Shared dependencies (`SettingsDep` reads the app's own settings)         |
-| `api/health.py`      | `GET /api/health`                                                        |
-| `api/fleet.py`       | `GET /api/fleet`, `/api/workers`, `/api/gpus`, `/api/gpus/{id}`          |
-| `fleet/models.py`    | `Worker`, `GpuDevice`, `Metric` (value + provenance), enums              |
-| `fleet/simulated.py` | The fixed simulated fleet (6 GPUs, 2 workers)                            |
-| `fleet/registry.py`  | In-memory `FleetRegistry`: the backend's source of truth for fleet state |
-| `__main__.py`        | `python -m pixelgpu` runs uvicorn with settings from the environment     |
+| Module               | Responsibility                                                                                    |
+| -------------------- | ------------------------------------------------------------------------------------------------- |
+| `main.py`            | `create_app(settings)` factory: routers, CORS, `app.state.settings`                               |
+| `config.py`          | `Settings` (pydantic-settings), env prefix `PIXELGPU_`                                            |
+| `api/deps.py`        | Shared dependencies (`SettingsDep` reads the app's own settings)                                  |
+| `api/health.py`      | `GET /api/health`                                                                                 |
+| `api/fleet.py`       | `GET /api/fleet`, `/api/workers`, `/api/gpus`, `/api/gpus/{id}`                                   |
+| `fleet/models.py`    | `Worker`, `GpuDevice`, `Metric` (value + provenance), enums                                       |
+| `fleet/simulated.py` | The fixed simulated fleet (6 GPUs, 2 workers)                                                     |
+| `fleet/registry.py`  | In-memory `FleetRegistry`: the backend's source of truth for fleet state                          |
+| `api/tasks.py`       | `POST/GET /api/tasks`, `GET /api/tasks/{id}`, `POST /api/tasks/{id}/cancel`, `GET /api/workloads` |
+| `api/errors.py`      | One error envelope for every failure; maps domain errors to HTTP codes                            |
+| `db.py`              | Engine and sessions, `UTCDateTime`, `upgrade_database()`                                          |
+| `migrations/`        | Alembic environment and versioned migrations (shipped inside the package)                         |
+| `tasks/workloads.py` | The workload allowlist: typed, `extra="forbid"` specs and their memory minimums                   |
+| `tasks/lifecycle.py` | `TaskStatus` and the allowed-transition table                                                     |
+| `tasks/models.py`    | ORM: `tasks` and `task_events`                                                                    |
+| `tasks/service.py`   | `TaskService`: create, list, get, cancel, and `transition()` (compare-and-swap)                   |
+| `__main__.py`        | `python -m pixelgpu` runs uvicorn with settings from the environment                              |
 
 All routes live under `/api`, so one reverse-proxy rule serves the API and the static frontend
 can share an origin.
@@ -74,10 +82,11 @@ device). It is never a backend value.
   system UI for prose). No external URLs are needed to render the UI.
 - **Runtime validation at the API boundary.** The frontend checks response shapes rather than
   trusting a cast.
-- **No database yet.** SQLAlchemy + Alembic arrive in Phase 2 with the first persisted models.
+- **Synchronous SQLAlchemy.** FastAPI runs sync endpoints in a thread pool, which is simple and
+  enough for local scale. Revisit if the scheduler or live updates need async I/O.
 - **TypeScript pinned to 6.0.x** because `typescript-eslint` does not yet support TS 7.
-- **Fleet state is in memory until Phase 2.** `FleetRegistry` is the seam: the database and
-  the scheduler will sit behind it without changing the API.
+- **Fleet state is still in memory (tasks are in the database).** `FleetRegistry` is the seam: the scheduler's
+  reservations will move it into the database in Phase 3 without changing the API.
 - **Health and activity are separate fields.** Health says whether a device can be used.
   Activity says what it is doing. The UI derives one visual state, with health taking priority.
 - **Provenance on every metric.** `Metric.source` is `simulated`, `measured` or `unavailable`,
@@ -89,9 +98,30 @@ device). It is never a backend value.
 - **The canvas is `aria-hidden`.** The fleet roster is the accessible equivalent, with text
   state labels and `aria-pressed` selection.
 
+## Tasks
+
+```
+TaskCreate ──validate (allowlist, extra=forbid)──► TaskService.create ──► tasks + task_events
+                                                                          │
+GET /api/tasks/{id} ◄── task + events (timeline and logs) ◄───────────────┘
+```
+
+- **Prompt vs workload.** `prompt` is free text kept for context; `workload` is a validated,
+  typed spec. Only the workload ever runs. The terminal shows the exact spec before you submit.
+- **One table for history.** `task_events` holds both status transitions (`kind=status`) and
+  log lines (`kind=log`), so the timeline and logs share ordering and storage.
+- **Transitions are compare-and-swap.** `UPDATE … WHERE id = ? AND status = <expected>`; if
+  no row changes, someone else moved the task first and the caller gets `InvalidTransitionError`.
+  The Phase 3 scheduler relies on this for reservations.
+- **Cancellation.** Not-yet-running tasks are cancelled immediately. Running tasks get
+  `cancel_requested_at`, and the worker finishes the transition.
+- **Migrations at startup.** With `PIXELGPU_AUTO_MIGRATE=true` (the default), the app applies
+  pending Alembic migrations in its lifespan. A test checks that the migrations match the ORM models.
+- **Timestamps are always UTC-aware.** `UTCDateTime` refuses naive datetimes and restores the
+  timezone that SQLite drops.
+
 ## Planned
 
-- **Phase 2:** SQLite via SQLAlchemy and Alembic, tasks and a lifecycle state machine.
 - **Phase 3:** Scheduler, queue, worker and telemetry interfaces with simulated workers.
 - **Phase 4:** WebSocket live updates.
 

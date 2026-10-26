@@ -4,9 +4,9 @@ A GPU orchestration platform with a cozy 8-bit control room. Submit AI workloads
 scheduler place them on GPU workers, and see each GPU light up in a pixel-art facility that is
 driven by real backend state.
 
-> **Status: Phase 1 (control room).** A pixel-art facility shows a fixed fleet of
-> **simulated** GPUs served by the backend. Tasks, scheduling and real hardware come in
-> later phases. See [docs/ROADMAP.md](docs/ROADMAP.md).
+> **Status: Phase 2 (tasks).** Submit allowlisted workloads from the command terminal. Tasks
+> are stored in SQLite with a full lifecycle history, and can be inspected and cancelled. There
+> is no scheduler yet, so tasks wait in the queue. The GPUs are **simulated**. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 PixelGPU always labels execution as **simulated**, **CPU** or **real GPU**, and never
 presents simulated activity or invented telemetry as real hardware.
@@ -17,6 +17,9 @@ presents simulated activity or invented telemetry as real hardware.
   distinct idle, reserved, running, error and offline states
 - Click a GPU (in the scene or the roster) to inspect it: health, schedulability, memory,
   utilization, worker and location, each value tagged _simulated_, _measured_ or _unavailable_
+- A command terminal that keeps your note separate from the exact, validated workload spec
+  that will run (echo, summarize text, sample inference, GPU benchmark)
+- Persistent tasks with a lifecycle state machine, timeline, logs, cancel and "run again"
 - A read-only fleet API (`/api/fleet`, `/api/gpus`, `/api/workers`) backed by 6 simulated
   GPUs on 2 simulated workers
 - Accessible fleet roster, reduced-motion support, phone layout, and a fallback if the scene fails
