@@ -74,9 +74,10 @@ a {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
   grid-template-areas:
+    "metrics inspector"
     "facility inspector"
     "work inspector"
-    "roster inspector";
+    "ops inspector";
   align-items: start;
   gap: var(--gap);
 }
@@ -109,14 +110,28 @@ a {
   }
 }
 
-.control-room__roster {
-  grid-area: roster;
+.control-room__metrics {
+  grid-area: metrics;
+}
+
+.control-room__ops {
+  grid-area: ops;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--gap);
+}
+
+@media (max-width: 1240px) {
+  .control-room__ops {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 960px) {
   .control-room {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "facility" "inspector" "work" "roster";
+    grid-template-areas: "metrics" "facility" "inspector" "work" "ops";
   }
   .control-room__inspector {
     position: static;
@@ -200,6 +215,134 @@ a {
     0 var(--px) 0 0 var(--ink),
     calc(var(--px) * -1) 0 0 0 var(--ink),
     var(--px) 0 0 0 var(--ink);
+}
+
+.chip__detail {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+}
+
+/* ---------- Metrics ---------- */
+
+.metrics__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: calc(var(--px) * 2);
+  margin: 0;
+}
+
+.metrics__item {
+  padding: calc(var(--px) * 2) calc(var(--px) * 3);
+  background: var(--term-bg);
+  color: var(--term-text);
+  box-shadow:
+    0 calc(var(--px) * -0.5) 0 0 var(--ink),
+    0 calc(var(--px) * 0.5) 0 0 var(--ink),
+    calc(var(--px) * -0.5) 0 0 0 var(--ink),
+    calc(var(--px) * 0.5) 0 0 0 var(--ink);
+}
+
+.metrics__item dt {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--term-muted);
+}
+
+.metrics__item dd {
+  margin: 0;
+  font-family: var(--font-pixel);
+  font-size: 1.1rem;
+  color: var(--term-accent);
+}
+
+/* ---------- Activity feed ---------- */
+
+.feed {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 3);
+}
+
+.feed .pixel-heading {
+  margin: 0;
+}
+
+.feed__empty {
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
+
+.feed__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 2);
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.feed__item {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: calc(var(--px) * 3);
+  padding-left: calc(var(--px) * 2);
+  border-left: var(--px) solid var(--cream-deep);
+  font-size: 0.82rem;
+}
+
+.feed__item time {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+  padding-top: 2px;
+}
+
+.feed__item--succeeded {
+  border-left-color: var(--leaf);
+}
+
+.feed__item--failed,
+.feed__item--error {
+  border-left-color: var(--red);
+}
+
+.feed__item--running,
+.feed__item--scheduled,
+.feed__item--warning {
+  border-left-color: var(--amber);
+}
+
+.feed__item--cancelled {
+  border-left-color: #6b6458;
+}
+
+.feed__task {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.feed__task:hover {
+  text-decoration: underline;
+}
+
+.feed__what {
+  font-family: var(--font-pixel);
+  font-size: 0.75rem;
+}
+
+.feed__message {
+  grid-column: 2;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
 }
 
 /* ---------- Status lamps ---------- */
@@ -488,6 +631,10 @@ a {
   flex-direction: column;
   gap: 2px;
   overflow-wrap: anywhere;
+}
+
+.facts dd .link-button {
+  align-self: flex-start;
 }
 
 .facts dt.visually-hidden + dd {

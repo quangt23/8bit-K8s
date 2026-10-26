@@ -16,6 +16,8 @@ import { StatusPill } from "./StatusPill";
 
 interface TaskInspectorProps {
   taskId: string;
+  /** Changes whenever live data changes, prompting a reload. */
+  refreshKey: unknown;
   labelFor: (workloadType: string) => string;
   onSelectGpu: (gpuId: string) => void;
   onTaskChanged: () => void;
@@ -37,12 +39,13 @@ function schedulingSummary(task: TaskDetail): string {
 
 export function TaskInspector({
   taskId,
+  refreshKey,
   labelFor,
   onSelectGpu,
   onTaskChanged,
   onRetried,
 }: TaskInspectorProps) {
-  const { state, reload } = useTaskDetail(taskId);
+  const { state, reload } = useTaskDetail(taskId, refreshKey);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 

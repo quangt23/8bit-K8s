@@ -6,7 +6,7 @@
 | 1     | Pixel-art control room, simulated GPUs | **Complete** |
 | 2     | Task submission and lifecycle          | **Complete** |
 | 3     | Real scheduler and simulated workers   | **Complete** |
-| 4     | Live updates and observability         | Not started  |
+| 4     | Live updates and observability         | **Complete** |
 | 5     | Real GPU discovery (NVIDIA, optional)  | Not started  |
 | 6     | Real inference workloads               | Not started  |
 | 7     | AI-assisted orchestration              | Not started  |
@@ -51,6 +51,14 @@
 - [x] The UI updates without a full-page refresh (polling every 1–1.5 s)
 - [x] Repeated runs behave predictably (same submissions give the same placements and explanations; simulations are deterministic)
 
+## Phase 4 acceptance criteria
+
+- [x] A submission shows up without a manual refresh (browser test: a task created through the API appears and runs)
+- [x] The correct GPU activates when a task starts (snapshot fleet state comes from reservations; browser test plus screenshots)
+- [x] Completion and failure update consistently everywhere (one snapshot feeds the scene, task list, inspector, feed and metrics)
+- [x] A disconnected frontend reconnects and recovers state (browser test cuts the WebSocket and changes data meanwhile; unit tests cover backoff and the watchdog)
+- [x] No duplicate events or inconsistent assignments (feed deduplicated by ID; stale revisions ignored; single-flight fetches; tested)
+
 ## Known gaps
 
 - No CI pipeline configured yet. `make check` is the intended CI entry point.
@@ -61,4 +69,6 @@
 - FIFO with backfill can starve large tasks (see SCHEDULER.md).
 - Scheduler and workers are threads in one process. Distributed workers are Phase 8.
 - The active-task limit is a soft cap (count, then insert).
-- The task list shows the newest 100 tasks; there's no pagination UI yet.
+- The task list shows active tasks plus the 50 most recent finished ones; there's no pagination UI yet.
+- Each change triggers a full snapshot fetch (simple and consistent, but not bandwidth-efficient).
+- Revisions reset when the backend restarts; clients handle this because they always refetch on `hello`.

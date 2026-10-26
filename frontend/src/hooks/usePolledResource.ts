@@ -11,11 +11,13 @@ export type Resource<T> =
  * the UI degrades instead of going blank. (Phase 4 replaces polling with live updates.)
  *
  * `fetcher` must be stable (wrap it in useCallback); remount the component to switch
- * to a different resource.
+ * to a different resource. Changing `refreshKey` reloads immediately, which lets live
+ * updates drive refreshes while the interval stays a slow safety net.
  */
 export function usePolledResource<T>(
   fetcher: (signal: AbortSignal) => Promise<T>,
   intervalMs: number,
+  refreshKey?: unknown,
 ) {
   const [state, setState] = useState<Resource<T>>({ kind: "loading" });
   const inFlight = useRef<AbortController | null>(null);
@@ -47,6 +49,13 @@ export function usePolledResource<T>(
       inFlight.current?.abort();
     };
   }, [load, intervalMs]);
+
+  const lastKey = useRef(refreshKey);
+  useEffect(() => {
+    if (Object.is(lastKey.current, refreshKey)) return;
+    lastKey.current = refreshKey;
+    void load();
+  }, [refreshKey, load]);
 
   return { state, reload: load };
 }

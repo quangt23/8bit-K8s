@@ -1,32 +1,32 @@
 import { useCallback, useMemo, useState } from "react";
 
+import type { FleetSnapshot } from "./api/fleet";
 import type { Task } from "./api/tasks";
 import { logoChip } from "./art/sprites";
+import { ActivityFeed } from "./components/ActivityFeed";
 import { CommandTerminal } from "./components/CommandTerminal";
+import { ConnectionChip } from "./components/ConnectionChip";
 import { FleetRoster } from "./components/FleetRoster";
 import { GpuInspector } from "./components/GpuInspector";
+import { MetricsStrip } from "./components/MetricsStrip";
 import { PixelSprite } from "./components/PixelSprite";
 import { TaskInspector } from "./components/TaskInspector";
 import { TaskQueue } from "./components/TaskQueue";
 import { FacilityPanel } from "./facility/FacilityPanel";
-import { useFleet, type FleetState } from "./hooks/useFleet";
-import { useTasks, useWorkloadCatalog } from "./hooks/useTasks";
+import type { Resource } from "./hooks/usePolledResource";
+import { useWorkloadCatalog } from "./hooks/useTasks";
+import { useLive } from "./live/useLive";
 
 type Selection = { kind: "gpu"; id: string } | { kind: "task"; id: string } | null;
 
-function LinkChip({ fleet }: { fleet: FleetState }) {
-  const [label, tone] =
-    fleet.kind === "loading"
-      ? ["Linking…", "warn"]
-      : fleet.kind === "failed" || fleet.error
-        ? ["API offline", "bad"]
-        : ["API linked", "ok"];
-  return (
-    <div className={`chip chip--${tone}`} role="status">
-      <span className={`lamp lamp--${tone}`} aria-hidden="true" />
-      <span>{label}</span>
-    </div>
-  );
+/** Narrow the live snapshot to one part of it, keeping its loading and error state. */
+function select<T>(
+  snapshot: ReturnType<typeof useLive>["snapshot"],
+  pick: (data: Extract<typeof snapshot, { kind: "ready" }>["data"]) => T,
+): Resource<T> {
+  return snapshot.kind === "ready"
+    ? { kind: "ready", data: pick(snapshot.data), error: snapshot.error }
+    : snapshot;
 }
 
 function EmptyInspector() {
@@ -41,19 +41,27 @@ function EmptyInspector() {
 }
 
 export default function App() {
-  const { state: fleet, reload: reloadFleet } = useFleet();
-  const { state: tasks, reload: reloadTasks } = useTasks();
+  const { snapshot, connection, feed, refresh } = useLive();
   const { state: catalog } = useWorkloadCatalog();
   const [selection, setSelection] = useState<Selection>(null);
 
-  const gpus = fleet.kind === "ready" ? fleet.data.gpus : [];
-  const workers = fleet.kind === "ready" ? fleet.data.workers : [];
-  const taskList = tasks.kind === "ready" ? tasks.data.tasks : [];
+  const fleet: Resource<FleetSnapshot> = useMemo(
+    () => select(snapshot, (s) => s.fleet),
+    [snapshot],
+  );
+  const tasks: Resource<{ tasks: Task[]; total: number }> = useMemo(
+    () => select(snapshot, (s) => ({ tasks: s.tasks, total: s.total_tasks })),
+    [snapshot],
+  );
+  const live = snapshot.kind === "ready" ? snapshot.data : null;
+  const gpus = live?.fleet.gpus ?? [];
+  const workers = live?.fleet.workers ?? [];
+  const revision = live?.revision ?? 0;
 
   const selectedGpu =
     selection?.kind === "gpu" ? (gpus.find((gpu) => gpu.id === selection.id) ?? null) : null;
   const selectedTask =
-    selection?.kind === "task" ? (taskList.find((t) => t.id === selection.id) ?? null) : null;
+    selection?.kind === "task" ? (live?.tasks.find((t) => t.id === selection.id) ?? null) : null;
   // A selected task highlights the GPU it is assigned to, if any.
   const highlightedGpuId = selectedGpu?.id ?? selectedTask?.assigned_gpu_id ?? null;
   const selectedWorker = workers.find((w) => w.id === selectedGpu?.worker_id) ?? null;
@@ -69,9 +77,9 @@ export default function App() {
   const onTaskCreated = useCallback(
     (task: Task) => {
       setSelection({ kind: "task", id: task.id });
-      void reloadTasks();
+      void refresh();
     },
-    [reloadTasks],
+    [refresh],
   );
 
   let inspector;
@@ -80,6 +88,7 @@ export default function App() {
       <GpuInspector
         key={selectedGpu.id}
         gpu={selectedGpu}
+        refreshKey={revision}
         worker={selectedWorker}
         onSelectTask={selectTask}
         labelFor={labelFor}
@@ -90,9 +99,10 @@ export default function App() {
       <TaskInspector
         key={selection.id}
         taskId={selection.id}
+        refreshKey={revision}
         labelFor={labelFor}
         onSelectGpu={selectGpu}
-        onTaskChanged={() => void reloadTasks()}
+        onTaskChanged={() => void refresh()}
         onRetried={onTaskCreated}
       />
     );
@@ -110,22 +120,27 @@ export default function App() {
             <p className="brand__tagline">GPU orchestration, one pixel at a time</p>
           </div>
         </div>
-        <LinkChip fleet={fleet} />
+        <ConnectionChip connection={connection} snapshot={snapshot} />
       </header>
 
-      {fleet.kind === "ready" && fleet.error && (
+      {snapshot.kind === "ready" && snapshot.error && (
         <p className="banner" role="alert">
-          Lost contact with the backend ({fleet.error}). Showing the last known state.
+          Lost contact with the backend ({snapshot.error}). Showing the last known state; retrying.
         </p>
       )}
 
       <main className="control-room">
+        {live && (
+          <div className="control-room__metrics">
+            <MetricsStrip metrics={live.metrics} />
+          </div>
+        )}
         <div className="control-room__facility">
           <FacilityPanel
             fleet={fleet}
             selectedGpuId={highlightedGpuId}
             onSelectGpu={selectGpu}
-            onRetry={() => void reloadFleet()}
+            onRetry={() => void refresh()}
           />
         </div>
         <div className="control-room__inspector">{inspector}</div>
@@ -135,24 +150,25 @@ export default function App() {
             tasks={tasks}
             selectedTaskId={selection?.kind === "task" ? selection.id : null}
             onSelectTask={selectTask}
-            onRetry={() => void reloadTasks()}
+            onRetry={() => void refresh()}
             labelFor={labelFor}
           />
         </div>
-        {gpus.length > 0 && (
-          <div className="control-room__roster">
+        <div className="control-room__ops">
+          <ActivityFeed events={feed} onSelectTask={selectTask} labelFor={labelFor} />
+          {gpus.length > 0 && (
             <FleetRoster
               gpus={gpus}
               workers={workers}
               selectedGpuId={selectedGpu?.id ?? null}
               onSelectGpu={selectGpu}
             />
-          </div>
-        )}
+          )}
+        </div>
       </main>
 
       <footer className="footer">
-        <span>Phase 3 · scheduler</span>
+        <span>Phase 4 · live</span>
         <a href="/api/docs" target="_blank" rel="noreferrer">
           API docs
         </a>

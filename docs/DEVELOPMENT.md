@@ -112,6 +112,8 @@ reduced-motion and phone-width layouts, and submit, reload and cancel real tasks
 - **"Address already in use" but nothing seems to be running.** A previous `make dev` may be
   suspended (Ctrl+Z instead of Ctrl+C). Run `jobs` in that terminal and `fg` it, then Ctrl+C.
   Or find it with `ps -eo pid,stat,cmd | grep -E "pixelgpu|vite"` (state `T` = stopped).
+- **The chip says "Reconnecting".** The page can't reach `ws://localhost:5173/api/live`. Check
+  that the backend is running. The UI keeps polling every 3 s meanwhile, so it stays up to date.
 - **The facility shows "couldn't start".** The browser console has the error. The roster and
   inspector keep working without the scene.
 

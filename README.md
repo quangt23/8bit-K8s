@@ -4,10 +4,12 @@ A GPU orchestration platform with a cozy 8-bit control room. Submit AI workloads
 scheduler place them on GPU workers, and see each GPU light up in a pixel-art facility that is
 driven by real backend state.
 
-> **Status: Phase 3 (scheduler).** A real scheduler places tasks on GPUs (best fit, with
-> atomic database reservations) and simulated workers run them with progress, logs, results
-> and cancellation. Every placement records which GPUs were considered and why. The GPUs and
-> workloads are **simulated**; real hardware is Phase 5 and real inference is Phase 6. See [docs/ROADMAP.md](docs/ROADMAP.md).
+> **Status: Phase 4 of 8 complete.** A backend scheduler places tasks on GPUs (best fit,
+> with atomic database reservations), and simulated workers run them with progress, logs,
+> results and cancellation. Every placement records which GPUs were considered and why. The UI
+> updates live over a WebSocket, reconnects on its own, and shows an activity feed and
+> orchestration metrics. The GPUs and workloads are **simulated**: real hardware is Phase 5 and
+> real inference is Phase 6. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 PixelGPU always labels execution as **simulated**, **CPU** or **real GPU**, and never
 presents simulated activity or invented telemetry as real hardware.
@@ -18,6 +20,10 @@ presents simulated activity or invented telemetry as real hardware.
   distinct idle, reserved, running, error and offline states
 - Click a GPU (in the scene or the roster) to inspect it: health, schedulability, memory,
   utilization, worker and location, each value tagged _simulated_, _measured_ or _unavailable_
+- Live updates: a WebSocket says when something changed, and the UI fetches one consistent
+  snapshot. It reconnects with backoff and backfills the activity feed without duplicates.
+- An activity feed of every lifecycle step and log line, plus orchestration metrics (queue,
+  allocation, throughput, success rate, median wait and run time)
 - A command terminal that keeps your note separate from the exact, validated workload spec
   that will run (echo, summarize text, sample inference, GPU benchmark)
 - Persistent tasks with a lifecycle state machine, timeline, logs, cancel and "run again"

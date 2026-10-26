@@ -1,6 +1,7 @@
 import { vi } from "vitest";
 
 import type { FleetSnapshot } from "../api/fleet";
+import type { FeedEvent, LiveSnapshot, Metrics } from "../api/live";
 import type { Task, TaskCreate, TaskDetail, TaskEvent, WorkloadInfo } from "../api/tasks";
 import { jsonResponse } from "./fetch";
 import { simulatedFleet } from "./fleetFixture";
@@ -39,6 +40,44 @@ const MIN_MEMORY: Record<string, number> = {
   benchmark: 4096,
 };
 
+/** A WebSocket the fake backend controls. Opens asynchronously, like a real one. */
+export class FakeWebSocket {
+  static readonly OPEN = 1;
+  readonly url: string;
+  readyState = 0;
+  onmessage: ((event: MessageEvent) => void) | null = null;
+  onclose: ((event: CloseEvent) => void) | null = null;
+  onerror: ((event: Event) => void) | null = null;
+  onopen: ((event: Event) => void) | null = null;
+
+  constructor(
+    url: string,
+    private readonly server: FakeBackend,
+  ) {
+    this.url = url;
+    server.sockets.add(this);
+    queueMicrotask(() => {
+      if (!server.sockets.has(this)) return;
+      if (server.offline) {
+        this.close();
+        return;
+      }
+      this.readyState = FakeWebSocket.OPEN;
+      this.receive({ type: "hello", revision: server.revision });
+    });
+  }
+
+  receive(message: unknown): void {
+    this.onmessage?.({ data: JSON.stringify(message) } as MessageEvent);
+  }
+
+  close(): void {
+    if (!this.server.sockets.delete(this)) return;
+    this.readyState = 3;
+    queueMicrotask(() => this.onclose?.({} as CloseEvent));
+  }
+}
+
 /**
  * An in-memory stand-in for the backend's HTTP API, enough to drive the UI in tests.
  * It mirrors the real API's shapes and error envelope, not its full validation.
@@ -51,12 +90,36 @@ export class FakeBackend {
   /** Return this error envelope (status 422) for the next POST /api/tasks. */
   rejectNextCreate: { message: string; field: string; detail: string } | null = null;
   readonly requests: { method: string; path: string; body: unknown }[] = [];
+  readonly sockets = new Set<FakeWebSocket>();
+  revision = 0;
+  private eventSeq = 0;
   private clock = Date.parse("2026-10-25T12:00:00Z");
 
   install() {
     const mock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => this.handle(input, init));
     vi.stubGlobal("fetch", mock);
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const server = this;
+    vi.stubGlobal(
+      "WebSocket",
+      class extends FakeWebSocket {
+        constructor(url: string) {
+          super(url, server);
+        }
+      },
+    );
     return mock;
+  }
+
+  /** What the real backend does after a commit: tell every live client. */
+  announce(): void {
+    this.revision += 1;
+    for (const socket of this.sockets) socket.receive({ type: "changed", revision: this.revision });
+  }
+
+  /** Drop every live connection (the server went away). */
+  disconnectAll(): void {
+    for (const socket of [...this.sockets]) socket.close();
   }
 
   addTask(overrides: Partial<TaskDetail> = {}): TaskDetail {
@@ -72,7 +135,7 @@ export class FakeBackend {
 
   private event(task: TaskDetail, event: Partial<TaskEvent>): void {
     task.events.push({
-      id: task.events.length + 1,
+      id: ++this.eventSeq,
       timestamp: this.now(),
       kind: "log",
       level: "info",
@@ -124,6 +187,64 @@ export class FakeBackend {
     return task;
   }
 
+  private feed(): FeedEvent[] {
+    return this.tasks
+      .flatMap((task) =>
+        task.events.map((e) => ({
+          ...e,
+          task_id: task.id,
+          workload_type: task.workload.type,
+          gpu_id: task.assigned_gpu_id,
+        })),
+      )
+      .sort((a, b) => a.id - b.id);
+  }
+
+  private metrics(): Metrics {
+    const count = (status: string) => this.tasks.filter((t) => t.status === status).length;
+    return {
+      generated_at: this.now(),
+      tasks_by_status: {
+        queued: count("queued"),
+        scheduled: count("scheduled"),
+        running: count("running"),
+        succeeded: count("succeeded"),
+        failed: count("failed"),
+        cancelled: count("cancelled"),
+      },
+      gpus: {
+        total: this.fleet?.gpus.length ?? 0,
+        healthy: this.fleet?.gpus.filter((g) => g.health === "healthy").length ?? 0,
+        allocated: this.fleet?.gpus.filter((g) => g.activity !== "idle").length ?? 0,
+      },
+      finished_last_5_minutes: count("succeeded") + count("failed") + count("cancelled"),
+      recent: {
+        sample_size: 0,
+        success_rate: null,
+        median_queue_wait_seconds: null,
+        median_run_seconds: null,
+      },
+    };
+  }
+
+  private snapshot(after: number | null): LiveSnapshot | null {
+    if (!this.fleet) return null;
+    const all = this.feed();
+    const latest = all.at(-1)?.id ?? 0;
+    const tasks = [...this.tasks].reverse().map((t) => this.summary(t));
+    return {
+      generated_at: this.now(),
+      revision: this.revision,
+      fleet: this.fleet,
+      tasks,
+      total_tasks: tasks.length,
+      metrics: this.metrics(),
+      events: after === null ? all.slice(-50) : all.filter((e) => e.id > after),
+      latest_event_id: latest,
+      events_truncated: false,
+    };
+  }
+
   private error(status: number, code: string, message: string, details: unknown[] = []) {
     return jsonResponse({ error: { code, message, details } }, status);
   }
@@ -136,6 +257,11 @@ export class FakeBackend {
     this.requests.push({ method, path, body });
     if (this.offline) throw new TypeError("Failed to fetch");
 
+    if (method === "GET" && path === "/api/live/snapshot") {
+      const after = url.searchParams.get("events_after");
+      const snap = this.snapshot(after === null ? null : Number(after));
+      return snap ? jsonResponse(snap) : this.error(500, "http_error", "boom");
+    }
     if (method === "GET" && path === "/api/fleet") {
       return this.fleet ? jsonResponse(this.fleet) : this.error(500, "http_error", "boom");
     }
@@ -156,7 +282,9 @@ export class FakeBackend {
         this.rejectNextCreate = null;
         return this.error(422, "validation_error", message, [{ field, message: detail }]);
       }
-      return jsonResponse(this.summary(this.create(body as TaskCreate)), 201);
+      const created = this.summary(this.create(body as TaskCreate));
+      queueMicrotask(() => this.announce());
+      return jsonResponse(created, 201);
     }
 
     const match = /^\/api\/tasks\/([^/]+)(\/cancel)?$/.exec(path);
@@ -185,6 +313,7 @@ export class FakeBackend {
         to_status: "cancelled",
         message: "Cancelled before it started running.",
       });
+      queueMicrotask(() => this.announce());
       return jsonResponse(this.summary(task));
     }
     return this.error(404, "not_found", "Not Found");

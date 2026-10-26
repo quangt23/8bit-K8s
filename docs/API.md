@@ -224,6 +224,67 @@ Every error uses one shape:
 
 ## Live updates
 
-The frontend polls: the fleet and the task list every 1.5 s, the selected task every 1 s,
-and a selected GPU's history every 2 s.
-WebSocket updates are planned for Phase 4.
+PixelGPU uses **invalidation**: the server says _when_ something changed, and the client
+fetches one consistent snapshot. The WebSocket never carries state, so messages can't
+arrive stale, out of order, or twice in a way that matters.
+
+### `WS /api/live`
+
+Server → client messages (the client sends nothing):
+
+| Message                              | When                                                                 |
+| ------------------------------------ | -------------------------------------------------------------------- |
+| `{"type": "hello", "revision": n}`   | Immediately after connecting                                         |
+| `{"type": "changed", "revision": n}` | After database commits, at most one per 50 ms (bursts are coalesced) |
+| `{"type": "ping", "revision": n}`    | After 15 s without other messages (keep-alive)                       |
+
+`revision` increases by one per `changed` message, for the life of the backend process.
+A client too far behind (32 unread messages) is disconnected with code 1013, and should
+reconnect and resync.
+
+Client protocol (as implemented in `frontend/src/live/`):
+
+1. Connect. On `hello`, fetch `GET /api/live/snapshot`.
+2. On `changed` with `revision` greater than the last snapshot's `revision`, fetch again.
+   Keep at most one fetch in flight; requests during a fetch become one more fetch after it.
+3. If nothing (not even `ping`) arrives for 40 s, treat the socket as dead.
+4. Reconnect with backoff of 0.5, 1, 2, 4 and 8 s, then every 10 s. While disconnected,
+   poll the snapshot every 3 s.
+
+### `GET /api/live/snapshot?events_after=` → `LiveSnapshot`
+
+Everything the control room shows, read in one database transaction:
+
+| Field              | Notes                                                                     |
+| ------------------ | ------------------------------------------------------------------------- |
+| `revision`         | Includes every change announced with this revision or earlier             |
+| `generated_at`     |                                                                           |
+| `fleet`            | Same as `GET /api/fleet`                                                  |
+| `tasks`            | Every active task, plus the 50 most recent finished ones, newest first    |
+| `total_tasks`      | Count of all tasks                                                        |
+| `metrics`          | Same as `GET /api/metrics`                                                |
+| `events`           | Feed events after `events_after`, oldest first; without it, the latest 50 |
+| `latest_event_id`  | Pass this as `events_after` next time                                     |
+| `events_truncated` | More than 500 events were missed: drop the cursor and start the feed over |
+
+### `GET /api/events?after=&limit=` → `{ events, latest_event_id, truncated }`
+
+The activity feed: every task event (status changes and log lines) across all tasks,
+oldest first. `task_events.id` only ever increases, so `after` works as a cursor, and
+paging with `after = last id` returns each event exactly once. Each event also carries
+`task_id`, `workload_type` and the task's `gpu_id`. `limit` is 1 to 500.
+
+### `GET /api/metrics` → `Metrics`
+
+Computed from task records. These are orchestration figures, **not hardware telemetry**.
+
+| Field                              | Meaning                                                                                  |
+| ---------------------------------- | ---------------------------------------------------------------------------------------- |
+| `tasks_by_status`                  | Count per lifecycle status                                                               |
+| `gpus.total`, `gpus.healthy`       |                                                                                          |
+| `gpus.allocated`                   | GPUs reserved by a scheduled or running task (not utilization)                           |
+| `finished_last_5_minutes`          | Tasks that reached a terminal status in the last 5 minutes                               |
+| `recent.sample_size`               | Last finished tasks considered (up to 50)                                                |
+| `recent.success_rate`              | Succeeded ÷ (succeeded + failed). Cancellations excluded; unschedulable counts as failed |
+| `recent.median_queue_wait_seconds` | Submitted → scheduled                                                                    |
+| `recent.median_run_seconds`        | Started → finished                                                                       |

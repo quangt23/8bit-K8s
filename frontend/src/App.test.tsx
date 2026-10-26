@@ -37,7 +37,7 @@ describe("control room", () => {
     render(<App />);
 
     expect(screen.getByText("Powering up the facility…")).toBeInTheDocument();
-    expect(screen.getByText("Linking…")).toBeInTheDocument();
+    expect(screen.getByText("Connecting…")).toBeInTheDocument();
   });
 
   it("renders every backend GPU in both the scene and the roster", async () => {
@@ -49,7 +49,7 @@ describe("control room", () => {
       expect(roster().getByRole("button", { name: new RegExp(id) })).toBeInTheDocument();
     }
     expect(screen.getByText("6 GPUs · 2 workers · all simulated")).toBeInTheDocument();
-    expect(screen.getByText("API linked")).toBeInTheDocument();
+    expect(await screen.findByText("Live")).toBeInTheDocument();
   });
 
   it("starts with an empty inspector", async () => {
@@ -137,7 +137,7 @@ describe("control room", () => {
     render(<App />);
 
     expect(await screen.findByText(/Couldn't load the fleet/)).toBeInTheDocument();
-    expect(screen.getByText("API offline")).toBeInTheDocument();
+    expect(screen.getByText("Backend offline")).toBeInTheDocument();
 
     backend.offline = false;
     const facility = within(screen.getByRole("region", { name: "GPU facility" }));

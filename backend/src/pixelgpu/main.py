@@ -8,14 +8,16 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import event
 
 from pixelgpu import __version__
-from pixelgpu.api import fleet, health, tasks
+from pixelgpu.api import fleet, health, live, tasks
 from pixelgpu.api.errors import install_error_handlers
 from pixelgpu.config import Settings, get_settings
 from pixelgpu.db import create_db_engine, create_session_factory, upgrade_database
 from pixelgpu.fleet.registry import FleetRegistry
 from pixelgpu.fleet.simulated import build_simulated_fleet
+from pixelgpu.live.broadcaster import LiveBroadcaster
 from pixelgpu.runtime import Runtime
 
 API_PREFIX = "/api"
@@ -29,17 +31,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         FleetRegistry(*build_simulated_fleet()) if settings.simulated_fleet else FleetRegistry()
     )
     runtime = Runtime(settings, session_factory, fleet_registry)
+    broadcaster = LiveBroadcaster()
+    # Every commit, from any thread or code path, tells live clients to refresh.
+    event.listen(session_factory, "after_commit", lambda _session: broadcaster.notify())
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         if settings.auto_migrate:
             upgrade_database(settings.database_url)
+        await broadcaster.start()
         if settings.scheduler_enabled:
             runtime.start()
         try:
             yield
         finally:
             runtime.stop()
+            await broadcaster.stop()
             engine.dispose()
 
     app = FastAPI(
@@ -53,6 +60,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.session_factory = session_factory
     app.state.fleet = fleet_registry
     app.state.runtime = runtime
+    app.state.broadcaster = broadcaster
     if settings.cors_origins:
         app.add_middleware(
             CORSMiddleware,
@@ -64,6 +72,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router, prefix=API_PREFIX)
     app.include_router(fleet.router, prefix=API_PREFIX)
     app.include_router(tasks.router, prefix=API_PREFIX)
+    app.include_router(live.router, prefix=API_PREFIX)
     return app
 
 

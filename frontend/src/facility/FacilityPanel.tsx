@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import type { GpuDevice, Worker } from "../api/fleet";
 import { StateLegend } from "../components/StateLegend";
 import { EXECUTION_MODE_LABELS } from "../fleet/gpuState";
-import type { FleetState } from "../hooks/useFleet";
+import type { FleetSnapshot, GpuDevice, Worker } from "../api/fleet";
+import type { Resource } from "../hooks/usePolledResource";
 import { useReducedMotion } from "../hooks/useReducedMotion";
 import { FacilityCanvas } from "./FacilityCanvas";
 import { computeFacilityLayout, VIEW_WIDTH } from "./layout";
 
 interface FacilityPanelProps {
-  fleet: FleetState;
+  fleet: Resource<FleetSnapshot>;
   selectedGpuId: string | null;
   onSelectGpu: (gpuId: string) => void;
   onRetry: () => void;

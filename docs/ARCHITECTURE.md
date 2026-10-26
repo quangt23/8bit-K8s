@@ -1,6 +1,6 @@
 # Architecture
 
-_Current as of Phase 3. Sections marked **planned** describe intent, not implemented code._
+_Current as of Phase 4. Sections marked **planned** describe intent, not implemented code._
 
 ## Components
 
@@ -54,7 +54,7 @@ can share an origin.
 #### React ↔ Phaser data flow
 
 ```
-/api/fleet ──► useFleet (React state) ──► FacilityModel {gpus, workers, selectedGpuId, reducedMotion}
+/api/live/snapshot ──► useLive (React state) ──► FacilityModel {gpus, workers, selectedGpuId, reducedMotion}
                     │                                 │ setModel()
                     ▼                                 ▼
           Inspector, FleetRoster              FacilityScene (render only)
@@ -140,8 +140,26 @@ POST /api/tasks ─► tasks (queued) ─► wake ─► SchedulerLoop ─► Sc
 Details, guarantees and limits are in [SCHEDULER.md](SCHEDULER.md). The frontend reads
 `scheduler_decision` and live GPU state from the API, and never assigns or explains placements itself.
 
-## Planned
+## Live updates
 
-- **Phase 4:** WebSocket live updates.
+```
+any commit (API / scheduler / worker thread)
+   └─ SQLAlchemy after_commit ─► LiveBroadcaster.notify()     (thread-safe, no I/O)
+                                     └─ debounce 50 ms ─► revision += 1 ─► "changed" to every socket
+browser: "changed" (revision > applied) ─► GET /api/live/snapshot?events_after=<cursor>
+                                            └─ fleet + tasks + metrics + new feed events (one transaction)
+```
+
+- **Why invalidation instead of streaming state?** Every screen update comes from one
+  consistent snapshot, so the scene, task list, inspector and feed can't disagree, and
+  reconnecting needs no special logic. The cost is one small request per change, which is fine
+  for a local control room. Deltas could replace it if bandwidth ever matters.
+- **No duplicates.** Feed events are merged by ID. Revisions at or below the last snapshot
+  are ignored. Fetches are single-flight, and requests during a fetch become one follow-up fetch.
+- **Recovery.** Reconnect with backoff, then refetch. The feed cursor backfills exactly the
+  missed events. The UI shows Live, Connecting, Reconnecting or Backend offline, plus when it
+  last updated.
+
+## Planned
 
 See [ROADMAP.md](ROADMAP.md).

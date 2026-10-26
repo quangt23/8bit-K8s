@@ -8,6 +8,8 @@ import { StatusLamp } from "./StatusLamp";
 
 interface GpuInspectorProps {
   gpu: GpuDevice;
+  /** Changes whenever live data changes, prompting a reload of the history. */
+  refreshKey: unknown;
   worker: Worker | null;
   onSelectTask: (taskId: string) => void;
   labelFor: (workloadType: string) => string;
@@ -65,8 +67,14 @@ function MemoryBar({ used, total }: { used: number; total: number }) {
   );
 }
 
-export function GpuInspector({ gpu, worker, onSelectTask, labelFor }: GpuInspectorProps) {
-  const { state: history } = useGpuHistory(gpu.id);
+export function GpuInspector({
+  gpu,
+  refreshKey,
+  worker,
+  onSelectTask,
+  labelFor,
+}: GpuInspectorProps) {
+  const { state: history } = useGpuHistory(gpu.id, refreshKey);
   const currentTaskId = gpu.current_task_id;
   const state = gpuVisualState(gpu);
   const used = gpu.memory_used.value;

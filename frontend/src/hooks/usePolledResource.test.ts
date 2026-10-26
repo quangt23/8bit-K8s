@@ -2,9 +2,12 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 
 import { jsonResponse, stubFetch } from "../test/fetch";
 import { simulatedFleet } from "../test/fleetFixture";
-import { useFleet } from "./useFleet";
+import { fetchFleet } from "../api/fleet";
+import { usePolledResource } from "./usePolledResource";
 
-describe("useFleet", () => {
+const useFleet = (interval: number) => usePolledResource(fetchFleet, interval);
+
+describe("usePolledResource", () => {
   it("keeps the last snapshot and reports the error when a refresh fails", async () => {
     const fetchMock = stubFetch(async () => jsonResponse(simulatedFleet()));
     const { result } = renderHook(() => useFleet(60_000));
