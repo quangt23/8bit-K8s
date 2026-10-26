@@ -1,11 +1,16 @@
 import type { GpuDevice, Metric, Worker } from "../api/fleet";
 import { formatMemory, gpuVisualState, STATE_STYLES } from "../fleet/gpuState";
+import { useGpuHistory } from "../hooks/useTasks";
+import { formatTime } from "../tasks/taskStatus";
 import { ModeBadge } from "./ModeBadge";
+import { StatusPill } from "./StatusPill";
 import { StatusLamp } from "./StatusLamp";
 
 interface GpuInspectorProps {
   gpu: GpuDevice;
   worker: Worker | null;
+  onSelectTask: (taskId: string) => void;
+  labelFor: (workloadType: string) => string;
 }
 
 function SourceTag({ source }: { source: Metric["source"] }) {
@@ -60,7 +65,9 @@ function MemoryBar({ used, total }: { used: number; total: number }) {
   );
 }
 
-export function GpuInspector({ gpu, worker }: GpuInspectorProps) {
+export function GpuInspector({ gpu, worker, onSelectTask, labelFor }: GpuInspectorProps) {
+  const { state: history } = useGpuHistory(gpu.id);
+  const currentTaskId = gpu.current_task_id;
   const state = gpuVisualState(gpu);
   const used = gpu.memory_used.value;
 
@@ -127,12 +134,45 @@ export function GpuInspector({ gpu, worker }: GpuInspectorProps) {
         </dd>
 
         <dt>Current task</dt>
-        <dd>{gpu.current_task_id ?? "None"}</dd>
+        <dd>
+          {currentTaskId ? (
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => onSelectTask(currentTaskId)}
+            >
+              {currentTaskId}
+            </button>
+          ) : (
+            "None"
+          )}
+        </dd>
       </dl>
 
       <section className="inspector__history" aria-labelledby="history-heading">
         <h3 id="history-heading">Recent workloads</h3>
-        <p>No workloads have run on this GPU.</p>
+        {history.kind === "loading" && <p>Loading…</p>}
+        {history.kind === "failed" && <p role="alert">Couldn't load history: {history.error}</p>}
+        {history.kind === "ready" &&
+          (history.data.tasks.length === 0 ? (
+            <p>No workloads have run on this GPU.</p>
+          ) : (
+            <ul className="history">
+              {history.data.tasks.map((task) => (
+                <li key={task.id}>
+                  <button
+                    type="button"
+                    className="history__item"
+                    onClick={() => onSelectTask(task.id)}
+                  >
+                    <StatusPill status={task.status} />
+                    <span>{labelFor(task.workload.type)}</span>
+                    <time dateTime={task.created_at}>{formatTime(task.created_at)}</time>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ))}
       </section>
     </aside>
   );

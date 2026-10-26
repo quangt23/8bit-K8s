@@ -48,6 +48,27 @@ export interface TaskEvent {
   data: Record<string, unknown> | null;
 }
 
+export interface SchedulingCandidate {
+  gpu_id: string;
+  worker_id: string;
+  memory_total_mb: number;
+  eligible: boolean;
+  reason: string | null;
+}
+
+/** Mirrors SchedulingDecision in backend/src/pixelgpu/scheduling/policy.py. */
+export interface SchedulingDecision {
+  outcome: "scheduled" | "waiting" | "unschedulable";
+  policy: string;
+  decided_at: string;
+  workload_type: string;
+  min_memory_mb: number;
+  selected_gpu_id: string | null;
+  selected_worker_id: string | null;
+  candidates: SchedulingCandidate[];
+  explanation: string;
+}
+
 export interface Task {
   id: string;
   prompt: string | null;
@@ -66,7 +87,7 @@ export interface Task {
   progress: number | null;
   result: Record<string, unknown> | null;
   error: { code: string; message: string } | null;
-  scheduler_decision: Record<string, unknown> | null;
+  scheduler_decision: SchedulingDecision | null;
 }
 
 export interface TaskDetail extends Task {
@@ -102,8 +123,13 @@ function expect<T>(body: unknown, guard: (v: unknown) => v is T, what: string): 
   return body;
 }
 
-export async function listTasks(signal?: AbortSignal): Promise<{ tasks: Task[]; total: number }> {
-  const body = await apiGet("/tasks?limit=100", { signal });
+export async function listTasks(
+  signal?: AbortSignal,
+  options: { gpuId?: string; limit?: number } = {},
+): Promise<{ tasks: Task[]; total: number }> {
+  const params = new URLSearchParams({ limit: String(options.limit ?? 100) });
+  if (options.gpuId) params.set("gpu_id", options.gpuId);
+  const body = await apiGet(`/tasks?${params.toString()}`, { signal });
   return expect(
     body,
     (v): v is { tasks: Task[]; total: number } =>

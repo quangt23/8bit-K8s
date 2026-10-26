@@ -36,6 +36,23 @@ Backend settings come from `PIXELGPU_*` environment variables or `backend/.env`.
 `.env.example` for the full list. `PIXELGPU_BACKEND_URL` changes where the Vite dev server
 proxies `/api`. `PIXELGPU_SIMULATED_FLEET=false` starts with no GPUs (to see the empty state).
 
+## Simulation
+
+The scheduler and two simulated workers start with the backend. Simulated workloads take
+deterministic times: echo 2 s, summary about 3 s, inference 2–43 s depending on model and `max_tokens`,
+and benchmarks their `duration_seconds`.
+
+| Setting                               | Default | Use                                            |
+| ------------------------------------- | ------- | ---------------------------------------------- |
+| `PIXELGPU_SIMULATION_SPEED`           | `1`     | e.g. `10` to make everything 10× faster        |
+| `PIXELGPU_SCHEDULER_ENABLED`          | `true`  | `false` to keep every task queued              |
+| `PIXELGPU_SCHEDULER_INTERVAL_SECONDS` | `1`     | Pass interval when nothing triggers one sooner |
+| `PIXELGPU_TASK_TIMEOUT_SECONDS`       | `600`   | Simulated seconds before a task times out      |
+
+To try a failure, submit an Echo whose message starts with `fail:` (e.g. `fail: disk on fire`).
+The task fails with `workload_failed` and that message. To try an unschedulable task, set
+"Min memory" above 24 GiB.
+
 ## Database
 
 Local development uses SQLite at `backend/pixelgpu.db` (gitignored). The backend applies

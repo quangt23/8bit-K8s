@@ -76,7 +76,15 @@ export default function App() {
 
   let inspector;
   if (selectedGpu) {
-    inspector = <GpuInspector gpu={selectedGpu} worker={selectedWorker} />;
+    inspector = (
+      <GpuInspector
+        key={selectedGpu.id}
+        gpu={selectedGpu}
+        worker={selectedWorker}
+        onSelectTask={selectTask}
+        labelFor={labelFor}
+      />
+    );
   } else if (selection?.kind === "task") {
     inspector = (
       <TaskInspector
@@ -144,7 +152,7 @@ export default function App() {
       </main>
 
       <footer className="footer">
-        <span>Phase 2 · tasks</span>
+        <span>Phase 3 · scheduler</span>
         <a href="/api/docs" target="_blank" rel="noreferrer">
           API docs
         </a>

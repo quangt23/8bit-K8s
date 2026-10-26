@@ -143,7 +143,11 @@ export class FakeBackend {
       return this.catalog ? jsonResponse(this.catalog) : this.error(500, "http_error", "boom");
     }
     if (method === "GET" && path === "/api/tasks") {
-      const newest = [...this.tasks].reverse().map((t) => this.summary(t));
+      const gpuId = url.searchParams.get("gpu_id");
+      const newest = [...this.tasks]
+        .reverse()
+        .filter((t) => !gpuId || t.assigned_gpu_id === gpuId)
+        .map((t) => this.summary(t));
       return jsonResponse({ tasks: newest, total: newest.length });
     }
     if (method === "POST" && path === "/api/tasks") {

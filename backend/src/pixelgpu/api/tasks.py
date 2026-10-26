@@ -5,7 +5,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Query, status
 
-from pixelgpu.api.deps import TaskServiceDep
+from pixelgpu.api.deps import RuntimeDep, TaskServiceDep
 from pixelgpu.api.errors import ErrorResponse
 from pixelgpu.tasks.lifecycle import TaskStatus
 from pixelgpu.tasks.models import TaskRecord
@@ -41,17 +41,20 @@ def list_workloads() -> list[WorkloadInfo]:
         status.HTTP_429_TOO_MANY_REQUESTS: {"model": ErrorResponse},
     },
 )
-def create_task(request: TaskCreate, service: TaskServiceDep) -> TaskRead:
-    return _read(service.create(request), service)
+def create_task(request: TaskCreate, service: TaskServiceDep, runtime: RuntimeDep) -> TaskRead:
+    task = _read(service.create(request), service)
+    runtime.wake()
+    return task
 
 
 @router.get("/tasks", response_model=TaskList)
 def list_tasks(
     service: TaskServiceDep,
     status_filter: Annotated[TaskStatus | None, Query(alias="status")] = None,
+    gpu_id: Annotated[str | None, Query(max_length=64)] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> TaskList:
-    tasks, total = service.list(status=status_filter, limit=limit)
+    tasks, total = service.list(status=status_filter, gpu_id=gpu_id, limit=limit)
     positions = service.queue_positions()
     return TaskList(tasks=[_read(task, service, positions) for task in tasks], total=total)
 
@@ -70,5 +73,7 @@ def get_task(task_id: str, service: TaskServiceDep) -> TaskDetail:
     response_model=TaskRead,
     responses={**NOT_FOUND, status.HTTP_409_CONFLICT: {"model": ErrorResponse}},
 )
-def cancel_task(task_id: str, service: TaskServiceDep) -> TaskRead:
-    return _read(service.cancel(task_id), service)
+def cancel_task(task_id: str, service: TaskServiceDep, runtime: RuntimeDep) -> TaskRead:
+    task = _read(service.cancel(task_id), service)
+    runtime.wake()  # cancelling a scheduled task frees its GPU
+    return task

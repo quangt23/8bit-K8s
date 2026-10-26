@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
+import type { SchedulingDecision } from "./api/tasks";
 import App from "./App";
 import { FakeBackend } from "./test/fakeBackend";
 
@@ -72,7 +73,7 @@ describe("command terminal", () => {
     expect(await inspector().findByText("warm-up run")).toBeInTheDocument();
     expect(inspector().getByText("Saved for context. Never executed.")).toBeInTheDocument();
     expect(inspector().getByText("8 GiB")).toBeInTheDocument();
-    expect(inspector().getByText(/No scheduler is running yet/)).toBeInTheDocument();
+    expect(inspector().getByText(/the scheduler hasn't looked at it yet/)).toBeInTheDocument();
     expect(inspector().getByText("Task accepted and queued.")).toBeInTheDocument();
   });
 
@@ -183,5 +184,109 @@ describe("tasks", () => {
     expect(screen.getByTestId("scene")).toHaveAttribute("data-selected", "GPU-03");
     await userEvent.click(await inspector().findByRole("button", { name: "GPU-03" }));
     expect(inspector().getByRole("heading", { name: "GPU-03" })).toBeInTheDocument();
+  });
+});
+
+const decision = (overrides: Partial<SchedulingDecision> = {}): SchedulingDecision => ({
+  outcome: "scheduled",
+  policy: "best_fit_memory",
+  decided_at: "2026-10-25T12:00:05Z",
+  workload_type: "echo",
+  min_memory_mb: 512,
+  selected_gpu_id: "GPU-05",
+  selected_worker_id: "sim-worker-b",
+  candidates: [
+    {
+      gpu_id: "GPU-01",
+      worker_id: "sim-worker-a",
+      memory_total_mb: 24576,
+      eligible: true,
+      reason: null,
+    },
+    {
+      gpu_id: "GPU-04",
+      worker_id: "sim-worker-a",
+      memory_total_mb: 16384,
+      eligible: false,
+      reason: "Device is reporting an error: Simulated fault.",
+    },
+    {
+      gpu_id: "GPU-05",
+      worker_id: "sim-worker-b",
+      memory_total_mb: 8192,
+      eligible: true,
+      reason: null,
+    },
+  ],
+  explanation: "Picked GPU-05: the smallest free GPU with at least 512 MiB (8 GiB, best fit).",
+  ...overrides,
+});
+
+describe("scheduling", () => {
+  it("shows the backend's decision, with every GPU it considered", async () => {
+    backend.addTask({
+      status: "running",
+      assigned_gpu_id: "GPU-05",
+      assigned_worker_id: "sim-worker-b",
+      progress: 0.4,
+      scheduler_decision: decision(),
+    });
+    await renderApp();
+    await userEvent.click(await taskList().findByRole("button", { name: /Running/ }));
+
+    const panel = within(await inspector().findByRole("region", { name: /Scheduler decision/ }));
+    expect(panel.getByText(/Picked GPU-05: the smallest free GPU/)).toBeInTheDocument();
+    expect(panel.getByText("best_fit_memory")).toBeInTheDocument();
+    const rows = within(panel.getByRole("table")).getAllByRole("row").slice(1);
+    expect(rows.map((r) => r.textContent)).toEqual([
+      "GPU-0124 GiBEligible",
+      "GPU-0416 GiBDevice is reporting an error: Simulated fault.",
+      "GPU-058 GiB✓ Selected",
+    ]);
+    expect(inspector().getByRole("progressbar", { name: "Task progress" })).toHaveAttribute(
+      "aria-valuenow",
+      "40",
+    );
+    expect(taskList().getByRole("button", { name: /Running/ })).toHaveTextContent("GPU-05 40%");
+
+    await userEvent.click(panel.getByRole("button", { name: "GPU-04" }));
+    expect(inspector().getByRole("heading", { name: "GPU-04" })).toBeInTheDocument();
+  });
+
+  it("explains why a task is still waiting", async () => {
+    backend.addTask({
+      scheduler_decision: decision({
+        outcome: "waiting",
+        selected_gpu_id: null,
+        selected_worker_id: null,
+        explanation: "Waiting for a GPU. GPU-05: Busy with task_other.",
+      }),
+    });
+    await renderApp();
+    await userEvent.click(await taskList().findByRole("button", { name: /Queued/ }));
+
+    expect(await inspector().findByText("Scheduler decision · Waiting")).toBeInTheDocument();
+    expect(
+      inspector().getByText("Waiting for a GPU. GPU-05: Busy with task_other."),
+    ).toBeInTheDocument();
+    expect(inspector().getByText("Waiting in queue (#1).")).toBeInTheDocument();
+  });
+
+  it("links a busy GPU to its task and lists its recent workloads", async () => {
+    backend.fleet!.gpus[4] = {
+      ...backend.fleet!.gpus[4]!,
+      activity: "running",
+      current_task_id: "task_0000000000000002",
+    };
+    backend.addTask({ status: "succeeded", assigned_gpu_id: "GPU-05" });
+    backend.addTask({ status: "running", assigned_gpu_id: "GPU-05", prompt: "the current one" });
+    await renderApp();
+
+    await userEvent.click(screen.getByRole("button", { name: "scene:GPU-05" }));
+    const history = within(await inspector().findByRole("region", { name: "Recent workloads" }));
+    expect(await history.findAllByRole("button")).toHaveLength(2);
+
+    await userEvent.click(inspector().getByRole("button", { name: "task_0000000000000002" }));
+    expect(await inspector().findByText("the current one")).toBeInTheDocument();
   });
 });

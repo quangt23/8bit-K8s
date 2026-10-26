@@ -6,6 +6,7 @@ Everything here is simulated and labelled as such. No hardware is touched.
 from typing import NamedTuple
 
 from pixelgpu.fleet.models import DeviceHealth, GpuDevice, Metric, RackLocation, Worker
+from pixelgpu.tasks.workloads import SUPPORTED_WORKLOAD_TYPES
 
 
 class _GpuSpec(NamedTuple):
@@ -100,6 +101,7 @@ def build_simulated_fleet() -> tuple[list[Worker], list[GpuDevice]]:
                 status="online",
                 rack=worker.rack,
                 gpu_ids=[gpu.id for gpu in worker.gpus],
+                supported_workloads=list(SUPPORTED_WORKLOAD_TYPES),
             )
         )
         gpus.extend(_build_gpu(gpu, worker.id, worker.rack) for gpu in worker.gpus)

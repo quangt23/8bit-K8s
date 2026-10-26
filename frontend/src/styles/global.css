@@ -1103,6 +1103,117 @@ a {
   cursor: pointer;
 }
 
+/* ---------- Scheduler decision ---------- */
+
+.decision {
+  padding: calc(var(--px) * 3);
+  background: var(--cream);
+  border-left: var(--px) solid var(--teal);
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 2);
+}
+
+.decision--waiting {
+  border-left-color: var(--amber);
+}
+
+.decision--unschedulable {
+  border-left-color: var(--red);
+  background: #f6e3dd;
+}
+
+.decision .inspector__subheading {
+  margin: 0;
+}
+
+.decision__explanation {
+  font-size: 0.88rem;
+}
+
+.candidates {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.candidates th,
+.candidates td {
+  text-align: left;
+  vertical-align: top;
+  padding: var(--px) calc(var(--px) * 1.5);
+  border-bottom: 1px solid var(--cream-deep);
+}
+
+.candidates .link-button {
+  white-space: nowrap;
+}
+
+.candidates thead th {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  color: var(--ink-soft);
+}
+
+.candidates td {
+  overflow-wrap: anywhere;
+}
+
+.candidates td:nth-child(2) {
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
+
+.candidates__selected {
+  background: #e3efd5;
+}
+
+.candidates__selected td:last-child {
+  color: var(--leaf-dark);
+  font-weight: 600;
+}
+
+.progress-bar .memory-bar__fill {
+  background: var(--lamp-green);
+}
+
+/* ---------- GPU history ---------- */
+
+.history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--px);
+}
+
+.history__item {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: calc(var(--px) * 2);
+  padding: var(--px) calc(var(--px) * 2);
+  border: none;
+  background: var(--cream);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.82rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.history__item:hover {
+  background: #efe2c6;
+}
+
+.history__item time {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+}
+
 /* ---------- Buttons ---------- */
 
 .pixel-button {

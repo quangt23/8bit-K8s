@@ -29,6 +29,11 @@ async function clickGpuInScene(page: Page, fleet: FleetSnapshot, gpuId: string) 
   );
 }
 
+const rosterButton = (page: Page, gpuId: string) =>
+  page
+    .getByRole("region", { name: "Fleet roster" })
+    .getByRole("button", { name: new RegExp(gpuId) });
+
 const inspectorHeading = (page: Page) =>
   page.getByRole("complementary").getByRole("heading", { level: 2 });
 
@@ -65,7 +70,7 @@ test("every visual state renders without errors", async ({ page }, testInfo) => 
 
   await page.goto("/");
   await expect(page.locator(".facility__canvas canvas")).toBeVisible();
-  await page.getByRole("button", { name: /GPU-01/ }).click();
+  await rosterButton(page, "GPU-01").click();
   await page.waitForTimeout(600);
 
   await testInfo.attach("all-states", {
@@ -81,7 +86,7 @@ test("the app stays usable when the scene cannot load", async ({ page }) => {
   await page.goto("/");
 
   await expect(page.getByText(/facility view couldn't start/)).toBeVisible();
-  await page.getByRole("button", { name: /GPU-02/ }).click();
+  await rosterButton(page, "GPU-02").click();
   await expect(inspectorHeading(page)).toHaveText("GPU-02");
 });
 
@@ -91,7 +96,7 @@ test("reduced motion still renders the facility", async ({ page }) => {
   await page.goto("/");
 
   await expect(page.locator(".facility__canvas canvas")).toBeVisible();
-  await page.getByRole("button", { name: /GPU-05/ }).click();
+  await rosterButton(page, "GPU-05").click();
   await expect(inspectorHeading(page)).toHaveText("GPU-05");
   expect(errors).toEqual([]);
 });
@@ -103,6 +108,6 @@ test("narrow screens stack facility, inspector and roster", async ({ page }) => 
   await expect(page.locator(".facility__canvas canvas")).toBeVisible();
   const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
   expect(scrollWidth).toBeLessThanOrEqual(390);
-  await page.getByRole("button", { name: /GPU-04/ }).click();
+  await rosterButton(page, "GPU-04").click();
   await expect(inspectorHeading(page)).toHaveText("GPU-04");
 });

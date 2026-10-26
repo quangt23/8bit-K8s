@@ -4,7 +4,8 @@ from alembic import context
 
 from pixelgpu.config import get_settings
 from pixelgpu.db import Base, create_db_engine
-from pixelgpu.tasks import models  # noqa: F401  (registers tables on Base.metadata)
+from pixelgpu.scheduling import models as _scheduling_models  # noqa: F401  (registers tables)
+from pixelgpu.tasks import models as _task_models  # noqa: F401
 
 target_metadata = Base.metadata
 

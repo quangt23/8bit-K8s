@@ -123,8 +123,8 @@ queued ──► scheduled ──► running ──► succeeded
    └───────────┴────────────┴──► failed / cancelled
 ```
 
-Only these transitions are allowed, and terminal states never change. Until the scheduler
-exists (Phase 3), tasks stay `queued`.
+Only these transitions are allowed, and terminal states never change. The backend's
+scheduler and workers drive every transition except cancellation; see [SCHEDULER.md](SCHEDULER.md).
 
 ### `POST /api/tasks` → 201 `Task`
 
@@ -152,9 +152,9 @@ Errors: `422 validation_error`, `422 unsupported_workload`, and `429 too_many_ac
 once `PIXELGPU_MAX_ACTIVE_TASKS` tasks are queued, scheduled or running. The limit is a soft
 cap: it's checked before insert, so simultaneous submissions can overshoot by a few.
 
-### `GET /api/tasks?status=&limit=` → `{ "tasks": Task[], "total": int }`
+### `GET /api/tasks?status=&gpu_id=&limit=` → `{ "tasks": Task[], "total": int }`
 
-Newest first. `status` filters by lifecycle state. `limit` is 1–200 (default 50). `total`
+Newest first. `status` filters by lifecycle state, and `gpu_id` by the GPU a task was assigned to. `limit` is 1–200 (default 50). `total`
 counts every match, not just the returned page.
 
 ### `GET /api/tasks/{id}` → `Task` plus `events`
@@ -170,9 +170,11 @@ counts every match, not just the returned page.
 
 ### `POST /api/tasks/{id}/cancel` → `Task`
 
-- `queued` or `scheduled`: becomes `cancelled` immediately, with error code `cancelled`.
-- `running`: sets `cancel_requested_at` and logs a warning. The worker is expected to stop
-  and finish the transition (Phase 3). Repeating the request has no further effect.
+- `queued` or `scheduled`: becomes `cancelled` immediately, with error code `cancelled`,
+  releasing any GPU reservation.
+- `running`: sets `cancel_requested_at` and logs a warning. The worker stops at its next
+  check (within a fraction of a second) and moves the task to `cancelled`. Repeating the
+  request has no further effect.
 - Finished (`succeeded`, `failed`, `cancelled`): `409 invalid_transition`.
 
 Unknown IDs return `404 not_found`.
@@ -222,5 +224,6 @@ Every error uses one shape:
 
 ## Live updates
 
-The frontend polls: the fleet every 5 s, the task list every 3 s, and the selected task every 2 s.
+The frontend polls: the fleet and the task list every 1.5 s, the selected task every 1 s,
+and a selected GPU's history every 2 s.
 WebSocket updates are planned for Phase 4.

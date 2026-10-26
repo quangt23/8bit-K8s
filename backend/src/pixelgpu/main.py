@@ -16,6 +16,7 @@ from pixelgpu.config import Settings, get_settings
 from pixelgpu.db import create_db_engine, create_session_factory, upgrade_database
 from pixelgpu.fleet.registry import FleetRegistry
 from pixelgpu.fleet.simulated import build_simulated_fleet
+from pixelgpu.runtime import Runtime
 
 API_PREFIX = "/api"
 
@@ -23,13 +24,23 @@ API_PREFIX = "/api"
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     engine = create_db_engine(settings.database_url)
+    session_factory = create_session_factory(engine)
+    fleet_registry = (
+        FleetRegistry(*build_simulated_fleet()) if settings.simulated_fleet else FleetRegistry()
+    )
+    runtime = Runtime(settings, session_factory, fleet_registry)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         if settings.auto_migrate:
             upgrade_database(settings.database_url)
-        yield
-        engine.dispose()
+        if settings.scheduler_enabled:
+            runtime.start()
+        try:
+            yield
+        finally:
+            runtime.stop()
+            engine.dispose()
 
     app = FastAPI(
         title="PixelGPU API",
@@ -39,10 +50,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.settings = settings
-    app.state.session_factory = create_session_factory(engine)
-    app.state.fleet = (
-        FleetRegistry(*build_simulated_fleet()) if settings.simulated_fleet else FleetRegistry()
-    )
+    app.state.session_factory = session_factory
+    app.state.fleet = fleet_registry
+    app.state.runtime = runtime
     if settings.cors_origins:
         app.add_middleware(
             CORSMiddleware,

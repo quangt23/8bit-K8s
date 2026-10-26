@@ -5,7 +5,8 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
-from pixelgpu.api.deps import FleetDep
+from pixelgpu.api.deps import FleetDep, SessionDep
+from pixelgpu.fleet.live import live_gpus, live_workers
 from pixelgpu.fleet.models import GpuDevice, Worker
 
 router = APIRouter(tags=["fleet"])
@@ -20,22 +21,22 @@ class FleetSnapshot(BaseModel):
 
 
 @router.get("/fleet", response_model=FleetSnapshot)
-def get_fleet(fleet: FleetDep) -> FleetSnapshot:
+def get_fleet(fleet: FleetDep, session: SessionDep) -> FleetSnapshot:
     return FleetSnapshot(
-        workers=fleet.list_workers(),
-        gpus=fleet.list_gpus(),
+        workers=live_workers(fleet),
+        gpus=live_gpus(session, fleet),
         generated_at=datetime.now(UTC),
     )
 
 
 @router.get("/workers", response_model=list[Worker])
 def list_workers(fleet: FleetDep) -> list[Worker]:
-    return fleet.list_workers()
+    return live_workers(fleet)
 
 
 @router.get("/gpus", response_model=list[GpuDevice])
-def list_gpus(fleet: FleetDep) -> list[GpuDevice]:
-    return fleet.list_gpus()
+def list_gpus(fleet: FleetDep, session: SessionDep) -> list[GpuDevice]:
+    return live_gpus(session, fleet)
 
 
 @router.get(
@@ -43,8 +44,8 @@ def list_gpus(fleet: FleetDep) -> list[GpuDevice]:
     response_model=GpuDevice,
     responses={status.HTTP_404_NOT_FOUND: {"description": "No GPU with this id"}},
 )
-def get_gpu(gpu_id: str, fleet: FleetDep) -> GpuDevice:
-    gpu = fleet.get_gpu(gpu_id)
+def get_gpu(gpu_id: str, fleet: FleetDep, session: SessionDep) -> GpuDevice:
+    gpu = next((g for g in live_gpus(session, fleet) if g.id == gpu_id), None)
     if gpu is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"GPU '{gpu_id}' not found.")
     return gpu

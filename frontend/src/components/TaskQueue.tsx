@@ -1,4 +1,4 @@
-import type { Task } from "../api/tasks";
+import { ACTIVE_TASK_STATUSES, type Task } from "../api/tasks";
 import type { Resource } from "../hooks/usePolledResource";
 import { formatTime, shortId } from "../tasks/taskStatus";
 import { StatusPill } from "./StatusPill";
@@ -9,6 +9,17 @@ interface TaskQueueProps {
   onSelectTask: (taskId: string) => void;
   onRetry: () => void;
   labelFor: (workloadType: string) => string;
+}
+
+/** Queue position, or where an active task is and how far along it is. */
+function rowMeta(task: Task): string {
+  if (task.queue_position) return `#${task.queue_position} · `;
+  if (!task.assigned_gpu_id || !ACTIVE_TASK_STATUSES.has(task.status)) return "";
+  const progress =
+    task.status === "running" && task.progress !== null
+      ? ` ${Math.round(task.progress * 100)}%`
+      : "";
+  return `${task.assigned_gpu_id}${progress} · `;
 }
 
 export function TaskQueue({
@@ -55,7 +66,7 @@ export function TaskQueue({
               <span className="task-row__meta">
                 <code>{shortId(task.id)}</code>
                 <span>
-                  {task.queue_position ? `#${task.queue_position} · ` : ""}
+                  {rowMeta(task)}
                   <time dateTime={task.created_at}>{formatTime(task.created_at)}</time>
                 </span>
               </span>

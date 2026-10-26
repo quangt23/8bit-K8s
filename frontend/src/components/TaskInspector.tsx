@@ -11,6 +11,7 @@ import {
 import { formatMemory } from "../fleet/gpuState";
 import { useTaskDetail } from "../hooks/useTasks";
 import { formatTime, TASK_STATUS_LABELS } from "../tasks/taskStatus";
+import { SchedulingPanel } from "./SchedulingPanel";
 import { StatusPill } from "./StatusPill";
 
 interface TaskInspectorProps {
@@ -22,15 +23,16 @@ interface TaskInspectorProps {
 }
 
 function schedulingSummary(task: TaskDetail): string {
-  if (task.scheduler_decision) return "See scheduler decision below.";
-  switch (task.status) {
-    case "queued":
-      return `Waiting in queue${task.queue_position ? ` (#${task.queue_position})` : ""}. No scheduler is running yet, so queued tasks wait here.`;
-    case "cancelled":
-      return "Cancelled before a GPU was assigned.";
-    default:
-      return "No scheduling decision recorded.";
+  if (task.status === "queued") {
+    const position = task.queue_position ? ` (#${task.queue_position})` : "";
+    return task.scheduler_decision
+      ? `Waiting in queue${position}.`
+      : `Queued${position}; the scheduler hasn't looked at it yet.`;
   }
+  if (task.status === "cancelled" && !task.assigned_gpu_id) {
+    return "Cancelled before a GPU was assigned.";
+  }
+  return task.scheduler_decision ? "See the decision below." : "No scheduling decision recorded.";
 }
 
 export function TaskInspector({
@@ -157,7 +159,22 @@ export function TaskInspector({
         {task.progress !== null && (
           <>
             <dt>Progress</dt>
-            <dd>{Math.round(task.progress * 100)}%</dd>
+            <dd>
+              <span className="metric">
+                {Math.round(task.progress * 100)}%
+                <span className="source-tag source-tag--simulated">worker-reported</span>
+              </span>
+              <div
+                className="memory-bar progress-bar"
+                role="progressbar"
+                aria-label="Task progress"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(task.progress * 100)}
+              >
+                <div className="memory-bar__fill" style={{ width: `${task.progress * 100}%` }} />
+              </div>
+            </dd>
           </>
         )}
       </dl>
@@ -178,6 +195,10 @@ export function TaskInspector({
           <h3>Result</h3>
           <pre>{JSON.stringify(task.result, null, 2)}</pre>
         </section>
+      )}
+
+      {task.scheduler_decision && (
+        <SchedulingPanel decision={task.scheduler_decision} onSelectGpu={onSelectGpu} />
       )}
 
       <div className="inspector__actions">

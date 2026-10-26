@@ -5,7 +5,7 @@
 | 0     | Barebones project that runs            | **Complete** |
 | 1     | Pixel-art control room, simulated GPUs | **Complete** |
 | 2     | Task submission and lifecycle          | **Complete** |
-| 3     | Real scheduler and simulated workers   | Not started  |
+| 3     | Real scheduler and simulated workers   | **Complete** |
 | 4     | Live updates and observability         | Not started  |
 | 5     | Real GPU discovery (NVIDIA, optional)  | Not started  |
 | 6     | Real inference workloads               | Not started  |
@@ -41,13 +41,24 @@
 - [x] The frontend reflects actual backend task status (polling; cancel and run-again round-trip through the API)
 - [x] Tasks stay `queued` until the Phase 3 scheduler exists
 
+## Phase 3 acceptance criteria
+
+- [x] Tasks are assigned by the backend, not the frontend (no API accepts an assignment; the scheduler decides)
+- [x] The selected GPU visibly activates in the scene (browser test and screenshots; reserved, running and completed states)
+- [x] Two tasks can't hold the same exclusive GPU at once (database primary key; six concurrent schedulers in a test)
+- [x] Reservations are released on success, failure and cancellation (plus timeout, unschedulable and restart; tested for each path)
+- [x] Impossible requirements get an understandable explanation (`unschedulable`, naming the largest GPU)
+- [x] The UI updates without a full-page refresh (polling every 1–1.5 s)
+- [x] Repeated runs behave predictably (same submissions give the same placements and explanations; simulations are deterministic)
+
 ## Known gaps
 
 - No CI pipeline configured yet. `make check` is the intended CI entry point.
 - Browser tests need Chromium's system libraries. They're not part of `make check` (see DEVELOPMENT.md).
-- "Ineligible for this task" GPU highlighting needs tasks and the scheduler (Phase 3).
-- Fleet state lives in memory; it moves to the database with reservations in Phase 3.
-- No task ever leaves `queued` on its own yet (no scheduler), so running, succeeded and failed
-  appear only in tests.
+- The scene doesn't yet highlight which GPUs a selected task was ineligible for; the task
+  inspector's decision table shows it instead.
+- GPU health is static (from the simulated seed).
+- FIFO with backfill can starve large tasks (see SCHEDULER.md).
+- Scheduler and workers are threads in one process. Distributed workers are Phase 8.
 - The active-task limit is a soft cap (count, then insert).
 - The task list shows the newest 100 tasks; there's no pagination UI yet.

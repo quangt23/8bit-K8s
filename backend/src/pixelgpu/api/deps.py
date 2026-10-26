@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from pixelgpu.config import Settings
 from pixelgpu.fleet.registry import FleetRegistry
+from pixelgpu.runtime import Runtime
 from pixelgpu.tasks.service import TaskService
 
 
@@ -26,9 +27,14 @@ def get_session(request: Request) -> Iterator[Session]:
         yield session
 
 
+def get_runtime(request: Request) -> Runtime:
+    return cast(Runtime, request.app.state.runtime)
+
+
 SettingsDep = Annotated[Settings, Depends(get_app_settings)]
 FleetDep = Annotated[FleetRegistry, Depends(get_fleet)]
 SessionDep = Annotated[Session, Depends(get_session)]
+RuntimeDep = Annotated[Runtime, Depends(get_runtime)]
 
 
 def get_task_service(session: SessionDep, settings: SettingsDep) -> TaskService:

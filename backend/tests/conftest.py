@@ -18,11 +18,19 @@ def database_url(tmp_path: Path) -> str:
 
 @pytest.fixture
 def make_client(database_url: str) -> Iterator[ClientFactory]:
-    """Build clients with their own settings. Each runs the app lifespan (migrations)."""
+    """Build clients with their own settings. Each runs the app lifespan (migrations).
+
+    The scheduler is off by default so API tests see tasks exactly as submitted;
+    scheduler tests turn it on or drive it directly.
+    """
     with ExitStack() as stack:
 
         def factory(**overrides: object) -> TestClient:
-            fields: dict[str, object] = {"environment": "test", "database_url": database_url}
+            fields: dict[str, object] = {
+                "environment": "test",
+                "database_url": database_url,
+                "scheduler_enabled": False,
+            }
             fields.update(overrides)
             app = create_app(Settings.model_validate(fields))
             return stack.enter_context(TestClient(app))

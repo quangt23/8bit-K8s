@@ -10,9 +10,10 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session, selectinload
 
+from pixelgpu.scheduling.models import GpuReservation
 from pixelgpu.tasks.lifecycle import (
     ACTIVE_STATUSES,
     TERMINAL_STATUSES,
@@ -66,7 +67,13 @@ class TaskService:
     # ----- queries -----
 
     def get(self, task_id: str, *, with_events: bool = False) -> TaskRecord:
-        query = select(TaskRecord).where(TaskRecord.id == task_id)
+        # populate_existing: always reflect the database, even for objects already in
+        # the session, since other threads (scheduler, workers, API) change tasks too.
+        query = (
+            select(TaskRecord)
+            .where(TaskRecord.id == task_id)
+            .execution_options(populate_existing=True)
+        )
         if with_events:
             query = query.options(selectinload(TaskRecord.events))
         task = self.session.scalars(query).one_or_none()
@@ -75,13 +82,16 @@ class TaskService:
         return task
 
     def list(
-        self, *, status: TaskStatus | None = None, limit: int = 50
+        self, *, status: TaskStatus | None = None, gpu_id: str | None = None, limit: int = 50
     ) -> tuple[list[TaskRecord], int]:
         query = select(TaskRecord)
         count = select(func.count()).select_from(TaskRecord)
         if status is not None:
             query = query.where(TaskRecord.status == status)
             count = count.where(TaskRecord.status == status)
+        if gpu_id is not None:
+            query = query.where(TaskRecord.assigned_gpu_id == gpu_id)
+            count = count.where(TaskRecord.assigned_gpu_id == gpu_id)
         tasks = self.session.scalars(
             query.order_by(TaskRecord.created_at.desc(), TaskRecord.id.desc()).limit(limit)
         ).all()
@@ -144,7 +154,7 @@ class TaskService:
         self.session.commit()
         return task
 
-    def transition(
+    def apply_transition(
         self,
         task_id: str,
         target: TaskStatus,
@@ -153,8 +163,13 @@ class TaskService:
         level: str = "info",
         data: dict[str, Any] | None = None,
         **fields: Any,
-    ) -> TaskRecord:
-        """Move a task to ``target`` if the state machine allows it. Atomic per task."""
+    ) -> None:
+        """Stage a status change in the current transaction without committing.
+
+        The UPDATE only matches if the task still has the status we read, so a
+        concurrent change makes this raise instead of silently overwriting it.
+        Moving to a terminal status also releases the task's GPU reservation.
+        """
         task = self.get(task_id)
         current = TaskStatus(task.status)
         ensure_transition(task_id, current, target)
@@ -168,12 +183,13 @@ class TaskService:
             update(TaskRecord)
             .where(TaskRecord.id == task_id, TaskRecord.status == current)
             .values(**values)
+            .execution_options(synchronize_session=False)
         )
         if result.rowcount != 1:  # type: ignore[attr-defined]
-            # Someone else changed the status between our read and write.
-            self.session.rollback()
-            latest = TaskStatus(self.get(task_id).status)
-            raise InvalidTransitionError(task_id, latest, target)
+            raise InvalidTransitionError(task_id, current, target)
+
+        if target in TERMINAL_STATUSES:
+            self.session.execute(delete(GpuReservation).where(GpuReservation.task_id == task_id))
 
         self._event(
             task_id,
@@ -185,9 +201,49 @@ class TaskService:
             to_status=target,
             data=data,
         )
+
+    def transition(
+        self,
+        task_id: str,
+        target: TaskStatus,
+        *,
+        message: str,
+        level: str = "info",
+        data: dict[str, Any] | None = None,
+        **fields: Any,
+    ) -> TaskRecord:
+        """Move a task to ``target`` and commit. Atomic per task."""
+        try:
+            self.apply_transition(
+                task_id, target, message=message, level=level, data=data, **fields
+            )
+        except InvalidTransitionError:
+            # Report the status that actually blocked us, which may be newer than our read.
+            self.session.rollback()
+            latest = TaskStatus(self.get(task_id).status)
+            raise InvalidTransitionError(task_id, latest, target) from None
         self.session.commit()
+        task = self.get(task_id)
         self.session.refresh(task)
         return task
+
+    def log(self, task_id: str, message: str, *, level: str = "info") -> None:
+        self._event(task_id, self.clock(), message=message, level=level)
+        self.session.commit()
+
+    def set_progress(self, task_id: str, progress: float) -> None:
+        """Record worker-reported progress (0 to 1) on a running task."""
+        self.session.execute(
+            update(TaskRecord)
+            .where(TaskRecord.id == task_id, TaskRecord.status == TaskStatus.RUNNING)
+            .values(progress=max(0.0, min(1.0, progress)), updated_at=self.clock())
+            .execution_options(synchronize_session=False)
+        )
+        self.session.commit()
+
+    def cancel_requested(self, task_id: str) -> bool:
+        query = select(TaskRecord.cancel_requested_at).where(TaskRecord.id == task_id)
+        return self.session.scalar(query) is not None
 
     def cancel(self, task_id: str) -> TaskRecord:
         """Cancel immediately if not started; otherwise ask the worker to stop."""

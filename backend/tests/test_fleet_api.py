@@ -84,7 +84,12 @@ def test_worker_gpu_ids_match_devices(client: TestClient) -> None:
 
     for worker in client.get("/api/workers").json():
         assert worker["last_heartbeat"] is None
-        assert worker["supported_workloads"] == []
+        assert worker["supported_workloads"] == [
+            "echo",
+            "text_summary",
+            "sample_inference",
+            "benchmark",
+        ]
         for gpu_id in worker["gpu_ids"]:
             assert gpus[gpu_id]["worker_id"] == worker["id"]
             assert gpus[gpu_id]["location"]["rack"] == worker["rack"]

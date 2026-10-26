@@ -96,7 +96,7 @@ class Worker(BaseModel):
     gpu_ids: list[str]
     supported_workloads: list[str] = Field(
         default_factory=list,
-        description="Workload types this worker accepts. Empty until workloads exist (Phase 2).",
+        description="Workload types this worker accepts.",
     )
     last_heartbeat: datetime | None = Field(
         default=None,

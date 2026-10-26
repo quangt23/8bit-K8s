@@ -26,6 +26,14 @@ class Settings(BaseSettings):
     auto_migrate: bool = True
     # Submission limit: queued + scheduled + running tasks allowed at once.
     max_active_tasks: int = 100
+    # Run the scheduler loop and simulated workers in this process.
+    scheduler_enabled: bool = True
+    # Seconds between scheduling passes when nothing wakes the scheduler sooner.
+    scheduler_interval_seconds: float = 1.0
+    # Simulated time runs this many times faster than real time (tests use large values).
+    simulation_speed: float = 1.0
+    # Tasks running longer than this (in simulated seconds) fail with a timeout.
+    task_timeout_seconds: float = 600.0
     # Register the built-in simulated fleet (6 GPUs on 2 workers) at startup.
     simulated_fleet: bool = True
 

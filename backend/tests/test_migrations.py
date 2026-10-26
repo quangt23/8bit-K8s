@@ -2,7 +2,8 @@ from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 
 from pixelgpu.db import Base, create_db_engine, upgrade_database
-from pixelgpu.tasks import models  # noqa: F401
+from pixelgpu.scheduling import models as _scheduling_models  # noqa: F401
+from pixelgpu.tasks import models as _task_models  # noqa: F401
 
 
 def test_migrations_match_the_models(database_url: str) -> None:

@@ -1,6 +1,6 @@
 # Architecture
 
-_Current as of Phase 2. Sections marked **planned** describe intent, not implemented code._
+_Current as of Phase 3. Sections marked **planned** describe intent, not implemented code._
 
 ## Components
 
@@ -85,8 +85,12 @@ device). It is never a backend value.
 - **Synchronous SQLAlchemy.** FastAPI runs sync endpoints in a thread pool, which is simple and
   enough for local scale. Revisit if the scheduler or live updates need async I/O.
 - **TypeScript pinned to 6.0.x** because `typescript-eslint` does not yet support TS 7.
-- **Fleet state is still in memory (tasks are in the database).** `FleetRegistry` is the seam: the scheduler's
-  reservations will move it into the database in Phase 3 without changing the API.
+- **Inventory in memory, reservations in the database.** The fleet's hardware (from the
+  simulated seed now, from discovery in Phase 5) lives in `FleetRegistry`. Who holds which GPU
+  lives in `gpu_reservations`, where database constraints make double-booking impossible.
+- **Threads, not a task broker.** The scheduler and simulated workers are threads in the
+  backend process. Reservations are already safe across processes; distributed workers (and a
+  durable queue, if needed) come in Phase 8.
 - **Health and activity are separate fields.** Health says whether a device can be used.
   Activity says what it is doing. The UI derives one visual state, with health taking priority.
 - **Provenance on every metric.** `Metric.source` is `simulated`, `measured` or `unavailable`,
@@ -120,9 +124,24 @@ GET /api/tasks/{id} ◄── task + events (timeline and logs) ◄────�
 - **Timestamps are always UTC-aware.** `UTCDateTime` refuses naive datetimes and restores the
   timezone that SQLite drops.
 
+## Scheduling and execution
+
+```
+POST /api/tasks ─► tasks (queued) ─► wake ─► SchedulerLoop ─► Scheduler.schedule_once()
+                                                │  evaluate GPUs, BestFitPolicy
+                                                │  INSERT gpu_reservations + queued→scheduled (one txn)
+                                                ▼
+                                    SimulatedWorker queue ─► runner thread (one per GPU)
+                                                │  scheduled→running, progress, logs
+                                                ▼
+                           succeeded / failed / cancelled (+ DELETE reservation, one txn) ─► wake
+```
+
+Details, guarantees and limits are in [SCHEDULER.md](SCHEDULER.md). The frontend reads
+`scheduler_decision` and live GPU state from the API, and never assigns or explains placements itself.
+
 ## Planned
 
-- **Phase 3:** Scheduler, queue, worker and telemetry interfaces with simulated workers.
 - **Phase 4:** WebSocket live updates.
 
 See [ROADMAP.md](ROADMAP.md).

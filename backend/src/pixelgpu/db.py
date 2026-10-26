@@ -58,6 +58,8 @@ def create_db_engine(url: str) -> Engine:
         def _enable_sqlite_foreign_keys(dbapi_connection: Any, _record: Any) -> None:
             cursor = dbapi_connection.cursor()
             cursor.execute("PRAGMA foreign_keys=ON")
+            # WAL lets readers proceed while one writer commits (scheduler, workers, API).
+            cursor.execute("PRAGMA journal_mode=WAL")
             cursor.close()
 
     return engine
