@@ -263,11 +263,15 @@ export function CommandTerminal({ catalog, onSubmitted }: CommandTerminalProps) 
             id={`${ids}-note`}
             type="text"
             maxLength={MAX_NOTE}
-            placeholder="Why you're running this. Saved with the task, never executed."
+            placeholder="Why you're running this"
             value={note}
             aria-invalid={errors.note ? true : undefined}
+            aria-describedby={`${ids}-note-hint`}
             onChange={(e) => setNote(e.target.value)}
           />
+          <span id={`${ids}-note-hint`} className="term-field__hint">
+            Saved with the task for context. Never executed.
+          </span>
           {errors.note && <span className="term-field__error">{errors.note}</span>}
         </div>
 
